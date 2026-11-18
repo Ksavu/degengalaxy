@@ -1,0 +1,2751 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>DEGEN GALAXY ($DGALAXY) — 3D Solana Meme Strategy</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/@solana/web3.js@1.95.8/lib/index.iife.min.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            void: '#060913',
+            solGreen: '#14F195',
+            solPurple: '#9945FF',
+            degenGold: '#FACC15',
+            wifPink: '#F472B6',
+            bonkOrange: '#FB923C',
+            pepeGreen: '#4ADE80',
+            popCyan: '#38BDF8',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      background: #060913;
+      color: #F8FAFC;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100dvh;
+      z-index: 0;
+      touch-action: none;
+    }
+    #canvas-container canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .glass-hud {
+      background: linear-gradient(165deg, rgba(11, 16, 30, 0.88) 0%, rgba(6, 9, 19, 0.94) 100%);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.72);
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 10px rgba(20, 241, 149, 0.25); }
+      50% { box-shadow: 0 0 20px rgba(20, 241, 149, 0.6); }
+    }
+    .pool-glow { animation: pulseGlow 2.4s infinite ease-in-out; }
+    @keyframes marqueeScroll {
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+    .animate-marquee {
+      display: inline-flex;
+      white-space: nowrap;
+      animation: marqueeScroll 26s linear infinite;
+    }
+    @keyframes floatCallout {
+      0% { opacity: 1; transform: translate(-50%, -50%) scale(0.75); }
+      25% { opacity: 1; transform: translate(-50%, -95%) scale(1.15); }
+      100% { opacity: 0; transform: translate(-50%, -185%) scale(0.95); }
+    }
+    .combat-callout {
+      animation: floatCallout 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- FULL-BLEED 3D VIEWPORT (75%+ UNOBSTRUCTED AT ALL TIMES) -->
+  <div id="canvas-container"></div>
+
+  <!-- FLOATING 3D PLANET LABELS & COMBAT MEME CALLOUTS -->
+  <div id="planet-labels-layer" class="fixed inset-0 z-10 pointer-events-none overflow-hidden"></div>
+  <div id="combat-callouts-layer" class="fixed inset-0 z-10 pointer-events-none overflow-hidden"></div>
+
+  <!-- RESTORE HUD PILL -->
+  <button id="restore-hud-btn" class="hidden fixed top-2.5 right-2.5 z-40 px-3 py-1.5 rounded-xl glass-hud border border-solGreen/50 text-solGreen text-xs font-mono font-extrabold shadow-xl">
+    👁️ Show HUD
+  </button>
+
+  <!-- MOBILE-FIRST ZERO-OVERLAP HUD OVERLAY -->
+  <div id="hud-root" class="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-3 sm:pt-3">
+
+    <!-- TOP CLUSTER: COMPACT 44PX HEADER + SINGLE SCROLLABLE PILL NAV BAR -->
+    <div class="pointer-events-auto flex flex-col gap-1.5 w-full max-w-3xl mx-auto">
+
+      <!-- 1. COMPACT TOP BAR (44PX) -->
+      <header class="h-11 glass-hud rounded-2xl px-2 flex items-center justify-between gap-1.5">
+        <button id="header-avatar-btn" class="flex items-center gap-1.5 shrink-0 text-left">
+          <div id="hud-commander-avatar" class="w-8 h-8 rounded-xl overflow-hidden border border-degenGold/80 bg-slate-950 shrink-0 shadow"></div>
+          <div class="hidden sm:block leading-tight">
+            <div id="hud-commander-name" class="text-[11px] font-extrabold text-white truncate max-w-[95px]">DegenLord.sol</div>
+            <div id="hud-faction-ticker" class="text-[9px] font-mono font-bold text-wifPink">$WIF</div>
+          </div>
+        </button>
+
+        <!-- Telemetry Pills: Energy, Aether, War Score, GM Streak, Live Epoch Jackpot -->
+        <div class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          <div class="px-1.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/35 text-[10px] sm:text-[11px] font-mono font-extrabold text-degenGold shrink-0">
+            ⚡<span id="hud-energy">15</span>/15
+          </div>
+          <div class="px-1.5 py-1 rounded-lg bg-sky-500/15 border border-sky-400/35 text-[10px] sm:text-[11px] font-mono font-extrabold text-popCyan shrink-0">
+            💎<span id="hud-gems">340</span>
+          </div>
+          <div class="px-1.5 py-1 rounded-lg bg-purple-500/15 border border-purple-400/35 text-[10px] sm:text-[11px] font-mono font-extrabold text-purple-300 shrink-0">
+            ⚔️<span id="hud-score">450</span>
+          </div>
+          <button id="top-gm-btn" class="px-1.5 py-1 rounded-lg bg-yellow-400/20 border border-yellow-300/50 text-[10px] sm:text-[11px] font-mono font-extrabold text-degenGold shrink-0 active:scale-95 transition" title="Say GM for Streak Multiplier">
+            ☀️GM <span id="hud-gm-mult">1.0x</span>
+          </button>
+          <button id="pool-badge-btn" class="px-2 py-1 rounded-lg bg-solGreen/15 border border-solGreen/55 text-[10px] sm:text-[11px] font-mono font-extrabold text-solGreen shrink-0 pool-glow">
+            🏆 <span id="hud-pool">48.50</span> SOL
+          </button>
+        </div>
+
+        <button id="hide-hud-btn" class="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-xs shrink-0" title="Hide HUD">
+          👁️
+        </button>
+      </header>
+
+      <!-- 2. HORIZONTAL SCROLLABLE PILL NAVIGATION -->
+      <nav class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+        <button data-drawer="map" class="pill-nav-btn px-2.5 py-1.5 rounded-xl bg-solGreen/20 border border-solGreen text-solGreen text-[11px] font-extrabold shrink-0 transition">
+          🌌 Map
+        </button>
+        <button data-drawer="guide" class="pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition">
+          📖 Guide
+        </button>
+        <button id="spin-pill-btn" data-drawer="spin" class="pill-nav-btn px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/25 to-pink-500/25 border border-degenGold/60 text-degenGold text-[11px] font-extrabold shrink-0 transition relative">
+          🎰 Spin
+          <span id="free-spin-dot" class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-solGreen"></span>
+        </button>
+        <button data-drawer="teams" class="pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition">
+          🛡️ Teams
+        </button>
+        <button data-drawer="heroes" class="pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition">
+          🐸 Heroes
+        </button>
+        <button data-drawer="fleet" class="pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition">
+          🚀 Fleet
+        </button>
+        <button data-drawer="chat" class="pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition relative">
+          💬 Chat
+          <span id="chat-ping-dot" class="hidden absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-solGreen"></span>
+        </button>
+        <button id="wallet-pill-btn" data-drawer="wallet" class="pill-nav-btn px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-solPurple to-indigo-600 border border-purple-400/40 text-white text-[11px] font-mono font-extrabold shrink-0 transition">
+          👻 Wallet
+        </button>
+        <button id="track-fleet-btn" class="px-2.5 py-1.5 rounded-xl glass-hud text-popCyan text-[11px] font-mono font-bold shrink-0 transition">
+          🎥 Track
+        </button>
+      </nav>
+
+      <!-- SLIM SCROLLING TRENCH BREAKING NEWS MARQUEE -->
+      <div class="mx-auto w-full max-w-xl overflow-hidden px-2.5 py-0.5 rounded-full bg-void/85 border border-white/10 text-[10px] font-mono text-solGreen">
+        <div id="trench-ticker" class="animate-marquee">
+          <span>🚨 BREAKING: Ansem just called Knit-Prime • ⚠️ WARNING: Whale moving 50M $DGALAXY to Raydium • ⚖️ SEC investigating Kekistan-9 for unregistered memes • ☀️ GM CT! Tap GM in chat for +50 Aether & Streak Multiplier • 🔥 Pump.fun creator fees added +2.8 SOL to Epoch Jackpot! &nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span>🚨 BREAKING: Ansem just called Knit-Prime • ⚠️ WARNING: Whale moving 50M $DGALAXY to Raydium • ⚖️ SEC investigating Kekistan-9 for unregistered memes • ☀️ GM CT! Tap GM in chat for +50 Aether & Streak Multiplier • 🔥 Pump.fun creator fees added +2.8 SOL to Epoch Jackpot! &nbsp;&nbsp;&nbsp;&nbsp;</span>
+        </div>
+      </div>
+
+      <!-- INTERACTIVE MEME FLASH EVENT BANNER (1-TAP DEGEN CHOICE) -->
+      <div id="flash-event-card" class="hidden mx-auto w-full max-w-md glass-hud rounded-2xl p-2.5 border border-degenGold/70 shadow-2xl">
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <span id="flash-event-title" class="text-[11px] font-mono font-black text-degenGold">📉 DIP DETECTED! Chart down -42%</span>
+          <span id="flash-event-timer" class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[10px] font-bold">10s</span>
+        </div>
+        <p id="flash-event-desc" class="text-[10px] text-gray-200 mb-2">Jeets are panic-selling! Diamond hand the dip for 2x War Score or paper-hand out?</p>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button id="flash-choice-a" class="py-1.5 px-2 rounded-xl bg-gradient-to-r from-solGreen to-emerald-400 text-slate-950 text-[11px] font-black">
+            💎 Buy the Dip (💎60)
+          </button>
+          <button id="flash-choice-b" class="py-1.5 px-2 rounded-xl bg-white/10 border border-white/20 text-gray-200 text-[11px] font-bold">
+            🧻 Paper Hand (+45💎)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MIDDLE SPACE: 75%+ UNOBSTRUCTED 3D GALAXY CANVAS -->
+    <div class="flex-1"></div>
+
+    <!-- BOTTOM CLUSTER: BOTTOM-SHEET DRAWER (MAX 46VH) + COMPACT TARGET CARD -->
+    <div class="pointer-events-auto flex flex-col gap-1.5 w-full max-w-3xl mx-auto">
+
+      <!-- SLIDE-UP BOTTOM-SHEET DRAWER -->
+      <section id="active-drawer" class="hidden glass-hud rounded-2xl max-h-[46vh] overflow-y-auto p-3 border border-white/20 shadow-2xl">
+        <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/10 sticky top-0 bg-[#080c17]/95 z-10">
+          <div>
+            <span id="drawer-subtitle" class="text-[9px] font-mono font-bold text-solGreen uppercase tracking-wider">ALLIANCE SYNDICATES</span>
+            <h2 id="drawer-title" class="text-sm font-extrabold text-white leading-none mt-0.5">Degen Teams & Coalitions</h2>
+          </div>
+          <button id="close-drawer-btn" class="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[11px] font-extrabold">
+            ✕ Close
+          </button>
+        </div>
+
+        <!-- DRAWER GUIDE: HOW TO PLAY & TOKENOMICS EXPLANATION -->
+        <div id="drawer-body-guide" class="hidden space-y-2.5 text-xs">
+          <div class="p-2.5 rounded-xl bg-slate-950/90 border border-solGreen/40 space-y-1">
+            <div class="text-[11px] font-mono font-extrabold text-solGreen">1. OBJECTIVE: CONQUER 75% TO WIN THE SOL POT</div>
+            <p class="text-[11px] text-gray-300 leading-relaxed">
+              Tap any rival or neutral planet on the 3D map and hit <span class="text-rose-400 font-bold">⚔️ Raid</span> or <span class="text-degenGold font-bold">📣 Rally</span>. Capture <span class="text-white font-bold">5 of 6 worlds (75%+)</span> with your alliance to end the Epoch and split the live <span class="text-solGreen font-bold">SOL Jackpot</span> via Solana Merkle claim!
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10">
+              <div class="text-[11px] font-extrabold text-wifPink">🎭 4 Meme Factions</div>
+              <p class="text-[10px] text-gray-300 mt-0.5"><span class="text-wifPink font-bold">$WIF</span> (+20% Speed), <span class="text-bonkOrange font-bold">$BONK</span> (+20% Attack), <span class="text-pepeGreen font-bold">$PEPE</span> (+25% Gems), <span class="text-popCyan font-bold">$POPCAT</span> (+30% Shields).</p>
+            </div>
+            <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10">
+              <div class="text-[11px] font-extrabold text-degenGold">☀️ GM & 🎰 Trench Spin</div>
+              <p class="text-[10px] text-gray-300 mt-0.5">Tap <span class="text-degenGold font-bold">☀️GM</span> for +50💎 & up to <span class="text-white font-bold">1.5x War Score</span>. Pull <span class="text-solGreen font-bold">🎰 Spin</span> for 100x God Candles or CTO Free Rallies!</p>
+            </div>
+            <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10">
+              <div class="text-[11px] font-extrabold text-popCyan">🛡️ Teams & Rallies</div>
+              <p class="text-[10px] text-gray-300 mt-0.5">Create a custom <span class="text-white font-bold">[TAG]</span> alliance, set your SOL prize split, and launch simultaneous multi-fleet <span class="text-degenGold font-bold">📣 Team Rallies</span>.</p>
+            </div>
+            <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10">
+              <div class="text-[11px] font-extrabold text-purple-300">🐸 Trench Heroes</div>
+              <p class="text-[10px] text-gray-300 mt-0.5">Recruit <span class="text-white font-bold">Chill Guy</span> (-1⚡ cost), <span class="text-white font-bold">Moo Deng</span> (+25% DMG), <span class="text-white font-bold">Peanut</span> (+35% Def), and <span class="text-white font-bold">Gigachad</span> (+25% Score).</p>
+            </div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-gradient-to-r from-solPurple/20 to-solGreen/15 border border-solPurple/45 space-y-1">
+            <div class="text-[11px] font-mono font-extrabold text-white">👻 HOW THE $DGALAXY PRIZE POOL WORKS</div>
+            <p class="text-[10px] text-gray-200 leading-relaxed">
+              • <span class="text-solGreen font-bold">Hold 50k+ $DGALAXY:</span> Free ranked Epoch entry (no 0.10 SOL pass needed) + attack bonuses.<br/>
+              • <span class="text-degenGold font-bold">Jackpot Funding:</span> Pump.fun creator fees + 80% of Overdrive Crates flow straight into the on-chain SOL Vault.
+            </p>
+          </div>
+        </div>
+
+        <!-- DRAWER 0: PUMP VS. RUG TRENCH WHEEL / DEGEN SPIN -->
+        <div id="drawer-body-spin" class="hidden space-y-2.5">
+          <div class="p-3 rounded-2xl bg-slate-950/90 border border-degenGold/45 text-center space-y-2">
+            <div class="flex items-center justify-between text-[10px] font-mono">
+              <span class="text-solGreen font-bold">PUMP ODDS: 80%</span>
+              <span id="spin-buff-badges" class="text-degenGold font-bold">No Active Buffs</span>
+              <span class="text-rose-400 font-bold">RUG RISK: 20%</span>
+            </div>
+
+            <!-- Animated 3-Reel Crypto Slot / Trench Wheel -->
+            <div class="grid grid-cols-3 gap-1.5 py-1">
+              <div id="reel-0" class="h-14 rounded-xl bg-void border border-white/15 flex flex-col items-center justify-center p-1">
+                <span class="text-xl">🕯️</span>
+                <span class="text-[9px] font-mono font-bold text-solGreen">100x</span>
+              </div>
+              <div id="reel-1" class="h-14 rounded-xl bg-void border-2 border-degenGold flex flex-col items-center justify-center p-1 shadow-lg">
+                <span class="text-xl">💎🙌</span>
+                <span class="text-[9px] font-mono font-bold text-degenGold">DIAMOND</span>
+              </div>
+              <div id="reel-2" class="h-14 rounded-xl bg-void border border-white/15 flex flex-col items-center justify-center p-1">
+                <span class="text-xl">🏎️</span>
+                <span class="text-[9px] font-mono font-bold text-popCyan">LAMBO</span>
+              </div>
+            </div>
+
+            <div id="spin-result-banner" class="text-xs font-extrabold text-white min-h-[20px]">
+              Pull the Degen Lever for 100x God Candles, Wen Lambo Speed, or CTO Takeovers!
+            </div>
+
+            <button id="pull-spin-btn" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-solGreen via-degenGold to-amber-500 text-slate-950 font-black text-xs shadow-lg active:scale-95 transition">
+              🎰 PULL TRENCH LEVER (FREE SPIN READY!)
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+            <div class="p-1.5 rounded-lg bg-white/5 border border-white/10 text-solGreen">🕯️ 100x God Candle: +400💎 +5⚡</div>
+            <div class="p-1.5 rounded-lg bg-white/5 border border-white/10 text-popCyan">💎🙌 Diamond Hands: +25% Shield</div>
+            <div class="p-1.5 rounded-lg bg-white/5 border border-white/10 text-degenGold">🏎️ Wen Lambo: +250⚔️ +30% Speed</div>
+            <div class="p-1.5 rounded-lg bg-white/5 border border-white/10 text-rose-400">📉 Dev Rugged: -100💎 (HODL!)</div>
+          </div>
+        </div>
+
+        <!-- DRAWER 1: TEAMS & ALLIANCES -->
+        <div id="drawer-body-teams" class="space-y-2.5">
+          <div id="my-team-banner" class="p-2.5 rounded-xl bg-slate-950/90 border border-solGreen/40 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span id="my-team-tag" class="px-1.5 py-0.5 rounded bg-wifPink/20 text-wifPink font-mono text-[10px] font-extrabold">[WIF]</span>
+                  <span id="my-team-name" class="text-xs font-extrabold text-white truncate">Hat Stays On Cartel</span>
+                </div>
+                <div id="my-team-split" class="text-[10px] font-mono text-gray-400">60% Equal / 40% Top Raiders • +20% Gem Yield</div>
+              </div>
+              <button id="leave-team-btn" class="px-2 py-1 rounded-lg bg-rose-500/20 border border-rose-400/40 text-rose-200 text-[10px] font-bold shrink-0">
+                Leave
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="drawer-convoy-btn" class="py-1.5 px-2 rounded-xl bg-degenGold/15 border border-degenGold/45 text-degenGold text-[11px] font-extrabold">
+                🚚 3D Supply Convoy
+              </button>
+              <button id="drawer-rally-btn" class="py-1.5 px-2 rounded-xl bg-gradient-to-r from-degenGold to-amber-500 text-slate-950 text-[11px] font-extrabold">
+                📣 Coordinated Rally
+              </button>
+            </div>
+          </div>
+
+          <!-- Found Custom Team -->
+          <div class="p-2.5 rounded-xl bg-slate-950/80 border border-white/10 space-y-2">
+            <div class="text-[11px] font-extrabold text-white">⚡ Found Custom Alliance Team</div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <input id="team-name-input" type="text" maxlength="20" placeholder="Team Name" class="col-span-2 px-2.5 py-1.5 rounded-lg bg-void border border-white/15 text-xs text-white focus:outline-none focus:border-solGreen" />
+              <input id="team-tag-input" type="text" maxlength="4" placeholder="TAG" class="px-2.5 py-1.5 rounded-lg bg-void border border-white/15 text-xs font-mono uppercase text-degenGold focus:outline-none focus:border-solGreen" />
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex gap-1.5" id="team-swatch-row">
+                <button data-hex="#F472B6" class="swatch-btn w-5 h-5 rounded-full bg-[#F472B6] ring-2 ring-white"></button>
+                <button data-hex="#FB923C" class="swatch-btn w-5 h-5 rounded-full bg-[#FB923C] opacity-80"></button>
+                <button data-hex="#4ADE80" class="swatch-btn w-5 h-5 rounded-full bg-[#4ADE80] opacity-80"></button>
+                <button data-hex="#38BDF8" class="swatch-btn w-5 h-5 rounded-full bg-[#38BDF8] opacity-80"></button>
+                <button data-hex="#FACC15" class="swatch-btn w-5 h-5 rounded-full bg-[#FACC15] opacity-80"></button>
+              </div>
+              <select id="team-split-select" class="px-2 py-1 rounded-lg bg-void border border-white/15 text-[10px] font-mono text-white">
+                <option value="60% Equal / 40% Top Raiders">60/40 SOL Split</option>
+                <option value="50% Equal / 50% Top Raiders">50/50 SOL Split</option>
+                <option value="100% Equal Member Share">100% Equal Share</option>
+              </select>
+            </div>
+            <button id="create-team-btn" class="w-full py-2 rounded-xl bg-gradient-to-r from-solGreen to-emerald-400 text-slate-950 text-xs font-extrabold">
+              🛡️ Create Team & Recolor Planets
+            </button>
+          </div>
+
+          <div id="teams-list-container" class="space-y-1.5"></div>
+        </div>
+
+        <!-- DRAWER 2: TRENCH HEROES -->
+        <div id="drawer-body-heroes" class="hidden space-y-2">
+          <div class="p-2.5 rounded-xl bg-slate-950/90 border border-degenGold/40 flex items-center gap-3">
+            <div id="hero-drawer-commander-svg" class="w-14 h-14 rounded-2xl overflow-hidden border border-degenGold/70 shrink-0 shadow-lg"></div>
+            <div class="min-w-0 flex-1">
+              <div class="text-[9px] font-mono text-degenGold font-bold uppercase">SUPREME FACTION COMMANDER</div>
+              <div id="hero-drawer-commander-name" class="text-xs font-extrabold text-white truncate">General WIF</div>
+              <div id="hero-drawer-commander-perk" class="text-[11px] text-solGreen font-bold">Hat Stays On (+20% Speed)</div>
+            </div>
+          </div>
+          <div id="heroes-list-container" class="space-y-1.5"></div>
+        </div>
+
+        <!-- DRAWER 3: SHIPYARD & FLEET ARMADA -->
+        <div id="drawer-body-fleet" class="hidden space-y-2.5">
+          <div class="grid grid-cols-3 gap-1.5">
+            <button data-ship="interceptor" class="ship-tier-btn p-2 rounded-xl bg-solGreen/15 border border-solGreen text-left">
+              <div class="text-[11px] font-extrabold text-white">🧢 Beanie Scout</div>
+              <div class="text-[10px] font-mono text-degenGold">⚡3 • Fast Swarm</div>
+            </button>
+            <button data-ship="cruiser" class="ship-tier-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left">
+              <div class="text-[11px] font-extrabold text-white">🏏 Plasma Cruiser</div>
+              <div class="text-[10px] font-mono text-popCyan">⚡4 💎70</div>
+            </button>
+            <button data-ship="mothership" class="ship-tier-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left">
+              <div class="text-[11px] font-extrabold text-white">🐸 Meme Titan</div>
+              <div class="text-[10px] font-mono text-purple-300">⚡6 💎140</div>
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button id="build-garrison-btn" class="py-2 px-2.5 rounded-xl bg-popCyan/15 border border-popCyan/45 text-popCyan text-xs font-extrabold">
+              + Orbit Guard Ship (💎65)
+            </button>
+            <button id="claim-gem-crate-btn" class="py-2 px-2.5 rounded-xl bg-gradient-to-r from-solPurple to-solGreen text-slate-950 text-xs font-extrabold">
+              🎁 Free 100x Gem Crate
+            </button>
+          </div>
+          <button id="btn-shield-up" class="w-full py-2 px-3 rounded-xl bg-sky-500/15 border border-sky-400/45 text-popCyan text-xs font-extrabold">
+            🛡️ Build <span id="next-fort-name">Diamond Hands Dome 💎</span> (💎<span id="shield-up-cost">110</span>)
+          </button>
+        </div>
+
+        <!-- DRAWER 4: LIVE TRENCH COMMS CHAT -->
+        <div id="drawer-body-chat" class="hidden space-y-2">
+          <div class="flex items-center justify-between gap-1">
+            <div class="flex gap-1">
+              <button data-channel="global" class="chat-chan-btn px-2 py-0.5 rounded bg-solGreen/20 border border-solGreen/50 text-solGreen text-[10px] font-mono font-extrabold">🌐 TRENCHES</button>
+              <button data-channel="team" class="chat-chan-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 text-[10px] font-mono font-bold">🛡️ TEAM</button>
+            </div>
+            <div class="flex gap-1">
+              <button id="chat-gm-btn" class="px-2 py-0.5 rounded bg-yellow-400/25 border border-yellow-300/60 text-degenGold text-[10px] font-mono font-extrabold">☀️ GM (+50💎)</button>
+              <button data-quick="🚀 SEND IT! Rally on target!" class="quick-chat-btn px-2 py-0.5 rounded bg-solGreen/20 text-solGreen text-[10px] font-mono font-bold">🚀 Send It</button>
+              <button data-quick="💎 DIAMOND HANDS! Hold the line!" class="quick-chat-btn px-2 py-0.5 rounded bg-popCyan/20 text-popCyan text-[10px] font-mono font-bold">💎 Hold</button>
+            </div>
+          </div>
+          <div id="chat-feed" class="h-24 overflow-y-auto no-scrollbar space-y-1 text-[11px] bg-slate-950/80 p-2 rounded-xl border border-white/10"></div>
+          <form id="chat-send-form" class="flex gap-1.5">
+            <input id="chat-text-input" type="text" maxlength="95" placeholder="Say GM or call a raid..." class="flex-1 px-2.5 py-1.5 rounded-xl bg-void border border-white/15 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-solGreen" />
+            <button type="submit" class="px-3 py-1.5 rounded-xl bg-solGreen text-slate-950 text-xs font-extrabold">Send</button>
+          </form>
+        </div>
+
+        <!-- DRAWER 5: WALLET & $DGALAXY TOKEN-GATE TIERS -->
+        <div id="drawer-body-wallet" class="hidden space-y-2.5">
+          <!-- Live Phantom / Solflare Connection Bar -->
+          <div class="p-2.5 rounded-xl bg-slate-950/90 border border-solPurple/45 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span id="wallet-status-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span id="wallet-conn-label" class="text-[11px] font-mono font-extrabold text-white truncate">Not Connected (Demo Mode)</span>
+              </div>
+              <div id="wallet-sol-bal" class="text-[10px] font-mono text-gray-400">Connect Phantom / Solflare to enter SOL Epoch</div>
+            </div>
+            <button id="connect-phantom-btn" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-solPurple to-indigo-500 text-white text-[11px] font-mono font-extrabold shrink-0 shadow">
+              👻 Connect
+            </button>
+          </div>
+
+          <!-- Ranked SOL Entry Pass (Active Now) vs Optional $DGALAXY Token Tiers (Attach Later) -->
+          <div class="grid grid-cols-3 gap-1.5">
+            <button data-tier="cadet" class="tier-select-btn p-2 rounded-xl bg-solGreen/15 border border-solGreen text-left">
+              <div class="text-[10px] font-mono font-extrabold text-solGreen">SOL PASS</div>
+              <div class="text-[9px] text-gray-300">0.10 SOL Entry</div>
+              <div class="text-[9px] text-degenGold mt-0.5">Live Now ✓</div>
+            </button>
+            <button data-tier="commander" class="tier-select-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left">
+              <div class="text-[10px] font-mono font-extrabold text-popCyan">COMMANDER</div>
+              <div class="text-[9px] text-gray-300">50k+ $DGALAXY</div>
+              <div class="text-[9px] text-gray-400 mt-0.5">Attach Mint</div>
+            </button>
+            <button data-tier="admiral" class="tier-select-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left">
+              <div class="text-[10px] font-mono font-extrabold text-purple-300">ADMIRAL</div>
+              <div class="text-[9px] text-gray-300">250k+ $DGALAXY</div>
+              <div class="text-[9px] text-gray-400 mt-0.5">+15% ATK</div>
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-center font-mono">
+            <div class="p-2 rounded-xl bg-slate-950/90 border border-white/10">
+              <div class="text-[9px] text-gray-400">EPOCH #1 SOL JACKPOT</div>
+              <div id="wallet-pool-display" class="text-sm font-extrabold text-solGreen mt-0.5">48.50 SOL</div>
+              <div class="text-[9px] text-gray-400">80% Passes + Creator Fees</div>
+            </div>
+            <div class="p-2 rounded-xl bg-slate-950/90 border border-white/10">
+              <div class="text-[9px] text-gray-400">EST. MERKLE CLAIM</div>
+              <div id="wallet-est-payout" class="text-sm font-extrabold text-degenGold mt-0.5">12.13 SOL</div>
+              <div class="text-[9px] text-gray-400">Rewards Program Vault</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button id="buy-epoch-pass-btn" class="py-2 px-2 rounded-xl bg-solGreen text-slate-950 text-[11px] font-extrabold">
+              🎟️ Ranked Pass (0.10 SOL)
+            </button>
+            <button id="boost-pool-btn" class="py-2 px-2 rounded-xl bg-gradient-to-r from-solPurple to-indigo-500 text-white text-[11px] font-extrabold">
+              ⚡ Overdrive (0.10 SOL)
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- COMPACT BOTTOM TARGET CARD (3 THUMB-FRIENDLY ACTIONS) -->
+      <div class="glass-hud rounded-2xl px-2.5 py-2 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <div id="target-faction-svg" class="w-11 h-11 rounded-xl overflow-hidden border border-white/25 bg-slate-950 shrink-0 shadow"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1">
+              <span id="target-planet-name" class="text-xs font-extrabold text-white truncate">Bonk-IV</span>
+              <span id="target-owner-badge" class="px-1.5 py-0.2 rounded text-[9px] font-mono font-extrabold bg-bonkOrange/20 text-bonkOrange shrink-0">[BONK]</span>
+              <span id="target-lv-badge" class="text-[9px] font-mono text-gray-400 truncate">Lv.1</span>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <div class="flex-1 max-w-[100px] h-1.5 bg-slate-950 rounded-full overflow-hidden border border-white/10">
+                <div id="target-hp-fill" class="h-full bg-gradient-to-r from-solGreen to-popCyan transition-all duration-200" style="width: 100%"></div>
+              </div>
+              <span id="target-hp-text" class="text-[10px] font-mono font-bold text-gray-200">100/100</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Thumb-Friendly Action Buttons -->
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="btn-focus" class="h-10 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/15 text-xs font-bold text-white transition" title="Focus Camera">
+            🎯 <span class="hidden sm:inline">Focus</span>
+          </button>
+          <button id="btn-raid" class="h-10 px-3 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 text-white text-xs font-extrabold shadow-lg active:scale-95 transition">
+            ⚔️ Raid (⚡<span id="raid-cost-label">3</span>)
+          </button>
+          <button id="btn-rally" class="h-10 px-2.5 rounded-xl bg-gradient-to-r from-degenGold to-amber-500 text-slate-950 text-xs font-extrabold shadow-lg active:scale-95 transition">
+            📣 <span class="hidden sm:inline">Rally</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FACTION / SPECIES SELECTION MODAL WITH LIVE AUTHENTIC PORTRAIT PREVIEW -->
+  <div id="faction-modal" class="fixed inset-0 z-50 bg-void/85 backdrop-blur-md flex items-center justify-center p-3 overflow-y-auto">
+    <div class="glass-hud rounded-3xl max-w-md w-full p-4 space-y-3 border border-solGreen/40 my-auto">
+      <div class="flex items-center gap-3 border-b border-white/10 pb-3">
+        <div id="modal-preview-svg" class="w-20 h-20 rounded-2xl overflow-hidden border-2 border-degenGold bg-slate-950 shrink-0 shadow-xl"></div>
+        <div class="min-w-0 flex-1">
+          <span class="px-2 py-0.5 rounded-full bg-solGreen/15 border border-solGreen/45 text-solGreen text-[9px] font-mono font-extrabold">
+            SOLANA EPOCH #1 • $DGALAXY
+          </span>
+          <h1 class="text-lg font-black text-white tracking-tight mt-0.5">DEGEN GALAXY</h1>
+          <div id="modal-commander-title" class="text-xs font-extrabold text-wifPink">General WIF ($WIF)</div>
+          <div id="modal-commander-desc" class="text-[10px] text-gray-300 leading-snug">Ribbed pink knit beanie stays on during FTL warp jumps (+20% Fleet Speed).</div>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-[10px] font-mono font-bold text-gray-400 uppercase">Commander Handle</label>
+        <input id="modal-handle-input" type="text" maxlength="18" value="DegenLord.sol" class="w-full mt-1 px-3 py-2 rounded-xl bg-void border border-white/15 text-xs font-mono font-bold text-white focus:outline-none focus:border-solGreen" />
+      </div>
+
+      <div>
+        <div class="text-[10px] font-mono font-bold text-gray-400 uppercase mb-1.5">Choose Your Meme Civilization</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button data-faction="wif" class="faction-pick-btn p-2 rounded-2xl bg-wifPink/15 border-2 border-wifPink text-left flex items-center gap-2 transition">
+            <div class="w-9 h-9 rounded-xl overflow-hidden shrink-0 border border-wifPink/50" id="mini-svg-wif"></div>
+            <div class="min-w-0">
+              <div class="text-xs font-extrabold text-white truncate">General WIF</div>
+              <div class="text-[10px] font-mono text-wifPink font-bold">+20% Speed</div>
+            </div>
+          </button>
+          <button data-faction="bonk" class="faction-pick-btn p-2 rounded-2xl bg-white/5 border border-white/15 text-left flex items-center gap-2 transition">
+            <div class="w-9 h-9 rounded-xl overflow-hidden shrink-0 border border-bonkOrange/50" id="mini-svg-bonk"></div>
+            <div class="min-w-0">
+              <div class="text-xs font-extrabold text-white truncate">Marshal BONK</div>
+              <div class="text-[10px] font-mono text-bonkOrange font-bold">+20% Firepower</div>
+            </div>
+          </button>
+          <button data-faction="pepe" class="faction-pick-btn p-2 rounded-2xl bg-white/5 border border-white/15 text-left flex items-center gap-2 transition">
+            <div class="w-9 h-9 rounded-xl overflow-hidden shrink-0 border border-pepeGreen/50" id="mini-svg-pepe"></div>
+            <div class="min-w-0">
+              <div class="text-xs font-extrabold text-white truncate">Overlord PEPE</div>
+              <div class="text-[10px] font-mono text-pepeGreen font-bold">+25% Gems</div>
+            </div>
+          </button>
+          <button data-faction="popcat" class="faction-pick-btn p-2 rounded-2xl bg-white/5 border border-white/15 text-left flex items-center gap-2 transition">
+            <div class="w-9 h-9 rounded-xl overflow-hidden shrink-0 border border-popCyan/50" id="mini-svg-popcat"></div>
+            <div class="min-w-0">
+              <div class="text-xs font-extrabold text-white truncate">Admiral POPCAT</div>
+              <div class="text-[10px] font-mono text-popCyan font-bold">+30% Shields</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button id="modal-how-to-btn" class="px-3.5 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-extrabold text-xs shrink-0 transition">
+          📖 Guide
+        </button>
+        <button id="enter-galaxy-btn" class="flex-1 py-3 rounded-2xl bg-gradient-to-r from-solGreen via-emerald-400 to-degenGold text-slate-950 font-black text-xs tracking-wide shadow-xl hover:brightness-110 transition">
+          🚀 LAUNCH INTO 3D DEGEN GALAXY
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EPOCH VICTORY & MERKLE CLAIM MODAL -->
+  <div id="victory-modal" class="hidden fixed inset-0 z-50 bg-void/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="glass-hud rounded-3xl max-w-sm w-full p-5 text-center border border-solGreen/50 space-y-3">
+      <div class="text-4xl">👑</div>
+      <div class="text-[10px] font-mono font-extrabold text-solGreen uppercase tracking-widest">GALACTIC DOMINATION</div>
+      <h2 class="text-xl font-black text-white">Epoch #1 Conquered!</h2>
+      <p class="text-xs text-gray-300">Your meme syndicate captured 75%+ of the star system and unlocked the Solana Rewards Merkle Vault!</p>
+      <div class="p-3 rounded-2xl bg-solGreen/15 border border-solGreen/50">
+        <div class="text-[10px] font-mono text-gray-300">MERKLE CLAIMABLE REWARD</div>
+        <div id="victory-sol-amount" class="text-2xl font-mono font-black text-solGreen mt-0.5">+24.25 SOL</div>
+      </div>
+      <button id="next-epoch-btn" class="w-full py-2.5 rounded-2xl bg-gradient-to-r from-solPurple to-solGreen text-white font-extrabold text-xs">
+        Claim & Start Epoch #2 →
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 0. DEPLOYMENT CONFIG (DEPLOY WITH SOL NOW -> ATTACH $DGALAXY MINT LATER)
+    // =========================================================================
+    const DEPLOY_CONFIG = {
+      NETWORK: 'mainnet-beta',
+      RPC_URL: 'https://api.mainnet-beta.solana.com', // Tip: Swap with your free Helius Mainnet RPC URL for high traffic
+      EPOCH_VAULT_WALLET: '4czHCesTdy5PnkfE4jue7GC1981FQS4XJUtsfVAiK9ug', // Wallet 1: Receives 80% of SOL passes + Pump.fun creator fees
+      TREASURY_WALLET: '8qUfkJ5TsiLM8xY2mDgYEBExYzrigNw8wEjJG91wPH4b',    // Wallet 2: Receives 20% studio fee
+      TOKEN_MINT: '', // Leave empty now! Paste $DGALAXY mint address after Pump.fun launch
+      SERVER_URL: ''  // Optional: Paste Railway/Render Socket.io URL (e.g. 'https://degen-galaxy.up.railway.app')
+    };
+
+    // =========================================================================
+    // 1. AUTHENTIC LAYERED & SHADED MEME CHARACTER ART (SVG ILLUSTRATIONS)
+    // =========================================================================
+    const FACTIONS = {
+      wif: {
+        id: 'wif',
+        ticker: '$WIF',
+        name: 'WIF Syndicate',
+        commander: 'General WIF ($WIF)',
+        perkLabel: 'Hat Stays On (+20% Speed)',
+        desc: 'Ribbed pink knit beanie stays on during FTL warp jumps (+20% Fleet Speed).',
+        homeworld: 'Knit-Prime',
+        hex: '#F472B6',
+        colorInt: 0xf472b6,
+        atmoInt: 0xf472b6,
+        hasRing: true,
+        orbitRadius: 21,
+        orbitSpeed: 0.14,
+        orbitPhase: 0.4,
+        radius3D: 3.0,
+        speedMult: 1.20,
+        atkMult: 1.05,
+        yieldMult: 1.05,
+        shieldMult: 1.0,
+        palette: { ocean: '#4A0E2E', land1: '#DB2777', land2: '#F9A8D4' },
+        // Authentic Dogwifhat: Shiba Inu with brown/tan fur shading, cream cheeks/muzzle, dark almond eyes & dusty-pink ribbed knit beanie
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="100%" height="100%" style="display:block">
+          <defs>
+            <radialGradient id="wifBg" cx="50%" cy="40%" r="65%">
+              <stop offset="0%" stop-color="#4C1D3D"/>
+              <stop offset="100%" stop-color="#130816"/>
+            </radialGradient>
+            <linearGradient id="shibaFur" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#E09F5A"/>
+              <stop offset="55%" stop-color="#C67D3B"/>
+              <stop offset="100%" stop-color="#9A5822"/>
+            </linearGradient>
+            <linearGradient id="wifBeanie" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#F5A3B7"/>
+              <stop offset="65%" stop-color="#DE7A95"/>
+              <stop offset="100%" stop-color="#B85672"/>
+            </linearGradient>
+          </defs>
+          <rect width="140" height="140" fill="url(#wifBg)"/>
+          <!-- Sci-fi Tactical Collar & Armor -->
+          <path d="M24 140 C28 112, 44 104, 70 104 C96 104, 112 112, 116 140 Z" fill="#1E293B" stroke="#F472B6" stroke-width="2"/>
+          <path d="M46 104 L70 118 L94 104" fill="none" stroke="#38BDF8" stroke-width="2.5"/>
+          <!-- Shiba Neck & Head Base -->
+          <path d="M46 92 L46 112 L94 112 L94 92 Z" fill="#B56C2E"/>
+          <ellipse cx="70" cy="76" rx="34" ry="30" fill="url(#shibaFur)"/>
+          <!-- Cream Cheeks & Muzzle (Iconic Urajiro Pattern) -->
+          <path d="M37 76 C37 94, 52 104, 70 104 C88 104, 103 94, 103 76 C92 78, 82 72, 70 72 C58 72, 48 78, 37 76 Z" fill="#FDF3E3"/>
+          <ellipse cx="70" cy="84" rx="15" ry="12" fill="#FFFBF2"/>
+          <!-- Brow Highlights -->
+          <ellipse cx="55" cy="63" rx="6" ry="3.5" fill="#FDE6C4" opacity="0.85"/>
+          <ellipse cx="85" cy="63" rx="6" ry="3.5" fill="#FDE6C4" opacity="0.85"/>
+          <!-- Dark Almond Eyes with Catchlights -->
+          <ellipse cx="55" cy="70" rx="5.2" ry="4.4" fill="#1C1410"/>
+          <ellipse cx="85" cy="70" rx="5.2" ry="4.4" fill="#1C1410"/>
+          <circle cx="53.5" cy="68.5" r="1.6" fill="#FFFFFF"/>
+          <circle cx="83.5" cy="68.5" r="1.6" fill="#FFFFFF"/>
+          <!-- Wet Nose & Subtle Shiba Smirk -->
+          <ellipse cx="70" cy="80" rx="5.5" ry="4" fill="#181210"/>
+          <ellipse cx="68.5" cy="78.8" rx="2" ry="1" fill="#64748B"/>
+          <path d="M70 84 L70 89 M62 89 Q70 94 78 89" fill="none" stroke="#291D18" stroke-width="2.2" stroke-linecap="round"/>
+          <!-- Signature Ribbed Dusty-Pink Knit Beanie Pulled Over Ears -->
+          <path d="M33 60 C31 24, 109 24, 107 60 Z" fill="url(#wifBeanie)"/>
+          <!-- Beanie Knit Ribs -->
+          <path d="M52 28 C48 40, 47 50, 47 58 M70 25 L70 58 M88 28 C92 40, 93 50, 93 58" fill="none" stroke="#9D3F5A" stroke-width="1.6" opacity="0.65"/>
+          <!-- Folded Knit Cuff -->
+          <rect x="30" y="51" width="80" height="14" rx="7" fill="#E889A3" stroke="#AD4764" stroke-width="1.5"/>
+          <path d="M40 52 L40 64 M50 52 L50 64 M60 52 L60 64 M70 52 L70 64 M80 52 L80 64 M90 52 L90 64 M100 52 L100 64" stroke="#AD4764" stroke-width="1.4" opacity="0.65"/>
+        </svg>`
+      },
+      bonk: {
+        id: 'bonk',
+        ticker: '$BONK',
+        name: 'BONK Armada',
+        commander: 'Marshal BONK ($BONK)',
+        perkLabel: 'Heavy Bonk (+20% Firepower)',
+        desc: 'Orange-gold Shiba wielding a glowing plasma baseball bat (+20% Raid Power).',
+        homeworld: 'Bonk-IV',
+        hex: '#FB923C',
+        colorInt: 0xfb923c,
+        atmoInt: 0xf97316,
+        hasRing: false,
+        orbitRadius: 30,
+        orbitSpeed: 0.11,
+        orbitPhase: 2.0,
+        radius3D: 3.1,
+        speedMult: 1.0,
+        atkMult: 1.20,
+        yieldMult: 1.05,
+        shieldMult: 1.0,
+        palette: { ocean: '#431407', land1: '#EA580C', land2: '#FACC15' },
+        // Authentic BONK Shiba: Pointed Shiba ears, bright orange-gold fur, mischievous grin, glowing neon-orange energy bat over shoulder
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="100%" height="100%" style="display:block">
+          <defs>
+            <radialGradient id="bonkBg" cx="50%" cy="45%" r="65%">
+              <stop offset="0%" stop-color="#582108"/>
+              <stop offset="100%" stop-color="#170904"/>
+            </radialGradient>
+            <linearGradient id="bonkFur" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FDBA74"/>
+              <stop offset="50%" stop-color="#F97316"/>
+              <stop offset="100%" stop-color="#C2410C"/>
+            </linearGradient>
+            <linearGradient id="plasmaBat" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#D97706"/>
+              <stop offset="40%" stop-color="#FB923C"/>
+              <stop offset="100%" stop-color="#FEF08A"/>
+            </linearGradient>
+          </defs>
+          <rect width="140" height="140" fill="url(#bonkBg)"/>
+          <!-- Glowing Neon-Orange Plasma Baseball Bat Over Shoulder -->
+          <g transform="rotate(24 104 65)">
+            <rect x="98" y="12" width="13" height="86" rx="6.5" fill="url(#plasmaBat)" stroke="#FFFBEB" stroke-width="1.5"/>
+            <rect x="101" y="96" width="7" height="22" rx="3" fill="#78350F"/>
+            <circle cx="104.5" cy="24" r="14" fill="#FB923C" opacity="0.28"/>
+          </g>
+          <!-- Battle Armor -->
+          <path d="M22 140 C26 112, 42 104, 68 104 C94 104, 110 112, 114 140 Z" fill="#1C1917" stroke="#FB923C" stroke-width="2"/>
+          <!-- Pointed Shiba Ears with Pink Inner Triangle -->
+          <polygon points="36,58 29,22 57,42" fill="#EA580C" stroke="#9A3412" stroke-width="1.5"/>
+          <polygon points="39,53 34,30 51,43" fill="#FDBA74"/>
+          <polygon points="100,58 107,22 79,42" fill="#EA580C" stroke="#9A3412" stroke-width="1.5"/>
+          <polygon points="97,53 102,30 85,43" fill="#FDBA74"/>
+          <!-- Head & Cream Cheeks -->
+          <ellipse cx="68" cy="72" rx="33" ry="29" fill="url(#bonkFur)"/>
+          <path d="M36 73 C36 91, 51 101, 68 101 C85 101, 100 91, 100 73 C89 75, 79 69, 68 69 C57 69, 47 75, 36 73 Z" fill="#FFF7ED"/>
+          <!-- Mischievous Eyebrows & Eyes -->
+          <path d="M45 57 L59 61" stroke="#431407" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M91 57 L77 61" stroke="#431407" stroke-width="3.2" stroke-linecap="round"/>
+          <ellipse cx="53" cy="66" rx="5" ry="4.5" fill="#1C1917"/>
+          <ellipse cx="83" cy="66" rx="5" ry="4.5" fill="#1C1917"/>
+          <circle cx="51.5" cy="64.5" r="1.6" fill="#FACC15"/>
+          <circle cx="81.5" cy="64.5" r="1.6" fill="#FACC15"/>
+          <!-- Nose & Confident Grin -->
+          <ellipse cx="68" cy="76" rx="5.5" ry="4" fill="#1C1917"/>
+          <path d="M55 83 Q68 95 81 83 Z" fill="#F43F5E" stroke="#431407" stroke-width="2"/>
+        </svg>`
+      },
+      pepe: {
+        id: 'pepe',
+        ticker: '$PEPE',
+        name: 'PEPE Cartel',
+        commander: 'Overlord PEPE ($PEPE)',
+        perkLabel: 'Buy The Dip (+25% Gems)',
+        desc: 'Iconic trench-coat cyber-frog with laser eyes (+25% Aether Gem Yield).',
+        homeworld: 'Kekistan-9',
+        hex: '#4ADE80',
+        colorInt: 0x4ade80,
+        atmoInt: 0x22c55e,
+        hasRing: true,
+        orbitRadius: 39,
+        orbitSpeed: 0.085,
+        orbitPhase: 3.6,
+        radius3D: 2.95,
+        speedMult: 1.0,
+        atkMult: 1.05,
+        yieldMult: 1.25,
+        shieldMult: 1.05,
+        palette: { ocean: '#052E16', land1: '#16A34A', land2: '#86EFAC' },
+        // Authentic Matt Furie-style Pepe: Double eye ridges, heavy upper eyelids, green skin shading, thick reddish-brown smirk lips & glowing laser eyes
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="100%" height="100%" style="display:block">
+          <defs>
+            <radialGradient id="pepeBg" cx="50%" cy="45%" r="65%">
+              <stop offset="0%" stop-color="#0B3B1E"/>
+              <stop offset="100%" stop-color="#04130A"/>
+            </radialGradient>
+            <linearGradient id="pepeSkin" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#65B84B"/>
+              <stop offset="65%" stop-color="#4A9B34"/>
+              <stop offset="100%" stop-color="#327222"/>
+            </linearGradient>
+          </defs>
+          <rect width="140" height="140" fill="url(#pepeBg)"/>
+          <!-- Dark Trench Coat & Collar -->
+          <path d="M20 140 L30 100 L110 100 L120 140 Z" fill="#0F172A" stroke="#4ADE80" stroke-width="2"/>
+          <polygon points="48,100 70,122 92,100" fill="#1E293B"/>
+          <!-- Classic Pepe Head Silhouette with Bulging Eye Ridges -->
+          <path d="M32 76 C28 58, 36 46, 44 43 C44 27, 68 26, 70 40 C72 26, 96 27, 96 43 C104 46, 112 58, 108 76 C106 95, 90 104, 70 104 C50 104, 34 95, 32 76 Z" fill="url(#pepeSkin)" stroke="#265919" stroke-width="1.8"/>
+          <!-- Bulging Sclera & Heavy Droopy Eyelids -->
+          <ellipse cx="55" cy="48" rx="13" ry="10" fill="#F8FAFC" stroke="#265919" stroke-width="1.5"/>
+          <ellipse cx="85" cy="48" rx="13" ry="10" fill="#F8FAFC" stroke="#265919" stroke-width="1.5"/>
+          <path d="M42 46 Q55 41 68 46 L68 38 L42 38 Z" fill="#4A9B34"/>
+          <path d="M72 46 Q85 41 98 46 L98 38 L72 38 Z" fill="#4A9B34"/>
+          <!-- Glowing Red Laser Eyes & Beams -->
+          <circle cx="56" cy="50" r="4.5" fill="#EF4444"/>
+          <circle cx="84" cy="50" r="4.5" fill="#EF4444"/>
+          <circle cx="56" cy="50" r="2" fill="#FEF08A"/>
+          <circle cx="84" cy="50" r="2" fill="#FEF08A"/>
+          <line x1="4" y1="50" x2="136" y2="50" stroke="#EF4444" stroke-width="3" opacity="0.72"/>
+          <line x1="4" y1="50" x2="136" y2="50" stroke="#FCA5A5" stroke-width="1.2"/>
+          <!-- Nostril Dots -->
+          <circle cx="65" cy="67" r="1.6" fill="#1E4614"/>
+          <circle cx="75" cy="67" r="1.6" fill="#1E4614"/>
+          <!-- Iconic Full Reddish-Brown Pepe Smirk Lips -->
+          <path d="M40 79 C52 84, 88 84, 100 79 C94 91, 46 91, 40 79 Z" fill="#B85D43" stroke="#5C281A" stroke-width="1.6"/>
+          <path d="M40 79 C54 83, 86 83, 100 79" fill="none" stroke="#451A0E" stroke-width="2" stroke-linecap="round"/>
+        </svg>`
+      },
+      popcat: {
+        id: 'popcat',
+        ticker: '$POPCAT',
+        name: 'POPCAT Dominion',
+        commander: 'Admiral POPCAT ($POPCAT)',
+        perkLabel: 'Diamond Paws (+30% Shield)',
+        desc: 'Wide-mouthed cosmic tabby fleet admiral (+30% Planetary Shield HP).',
+        homeworld: 'Meow-Cryo',
+        hex: '#38BDF8',
+        colorInt: 0x38bdf8,
+        atmoInt: 0x38bdf8,
+        hasRing: false,
+        orbitRadius: 48,
+        orbitSpeed: 0.068,
+        orbitPhase: 5.1,
+        radius3D: 3.05,
+        speedMult: 1.0,
+        atkMult: 1.0,
+        yieldMult: 1.10,
+        shieldMult: 1.30,
+        palette: { ocean: '#082F49', land1: '#0284C7', land2: '#E0F2FE' },
+        // Authentic POPCAT: Oatmeal/cream tabby cat, forehead stripes, wide saucer eyes, pink nose, huge circular "O" mouth & Admiral uniform
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" width="100%" height="100%" style="display:block">
+          <defs>
+            <radialGradient id="popBg" cx="50%" cy="45%" r="65%">
+              <stop offset="0%" stop-color="#0C3554"/>
+              <stop offset="100%" stop-color="#051322"/>
+            </radialGradient>
+            <linearGradient id="catFur" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#F3ECE1"/>
+              <stop offset="65%" stop-color="#DFD3C3"/>
+              <stop offset="100%" stop-color="#B8A996"/>
+            </linearGradient>
+          </defs>
+          <rect width="140" height="140" fill="url(#popBg)"/>
+          <!-- Navy & Gold Fleet Admiral Uniform -->
+          <path d="M22 140 L32 102 L108 102 L118 140 Z" fill="#0F172A" stroke="#38BDF8" stroke-width="2"/>
+          <rect x="34" y="103" width="16" height="6" rx="2" fill="#FACC15"/>
+          <rect x="90" y="103" width="16" height="6" rx="2" fill="#FACC15"/>
+          <!-- Cat Ears -->
+          <polygon points="38,54 32,20 60,38" fill="#D2C3B0" stroke="#8C7B68" stroke-width="1.5"/>
+          <polygon points="41,50 37,27 55,40" fill="#F4A4B8"/>
+          <polygon points="102,54 108,20 80,38" fill="#D2C3B0" stroke="#8C7B68" stroke-width="1.5"/>
+          <polygon points="99,50 103,27 85,40" fill="#F4A4B8"/>
+          <!-- Cat Head -->
+          <ellipse cx="70" cy="70" rx="35" ry="32" fill="url(#catFur)"/>
+          <!-- Subtle Tabby Forehead Stripes -->
+          <path d="M62 41 L64 49 M70 39 L70 48 M78 41 L76 49" stroke="#9C8B78" stroke-width="2.5" stroke-linecap="round"/>
+          <!-- Cosmic Admiral Cap Crest -->
+          <path d="M48 33 L92 33 L88 23 L52 23 Z" fill="#0F172A" stroke="#FACC15" stroke-width="1.6"/>
+          <circle cx="70" cy="28" r="3" fill="#38BDF8"/>
+          <!-- Wide Saucer Eyes -->
+          <circle cx="53" cy="59" r="7.5" fill="#1E1B18"/>
+          <circle cx="87" cy="59" r="7.5" fill="#1E1B18"/>
+          <circle cx="50.5" cy="56.5" r="2.4" fill="#FFFFFF"/>
+          <circle cx="84.5" cy="56.5" r="2.4" fill="#FFFFFF"/>
+          <!-- Tiny Pink Nose -->
+          <polygon points="66,66 74,66 70,70" fill="#F472B6"/>
+          <!-- Iconic Wide-Open Circular POP "O" Mouth -->
+          <ellipse cx="70" cy="84" rx="13" ry="15.5" fill="#9F1239" stroke="#4C0519" stroke-width="2"/>
+          <ellipse cx="70" cy="91" rx="8" ry="6" fill="#FB7185"/>
+        </svg>`
+      }
+    };
+
+    const MEME_HEROES = [
+      {
+        id: 'chillguy',
+        name: 'Chill Guy',
+        perk: 'Zero Stress: -1⚡ Raid Cost',
+        stat: 'energySave',
+        val: 1,
+        cost: 90,
+        // Authentic Chill Guy: Brown cartoon dog in grey crewneck sweater, relaxed half-lidded eyes, hands-in-pockets smirk
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="100%" height="100%" style="display:block">
+          <rect width="96" height="96" fill="#1E293B"/>
+          <!-- Grey Crewneck Sweater & Hands-in-Pockets Arms -->
+          <path d="M16 96 C18 68, 30 60, 48 60 C66 60, 78 68, 80 96 Z" fill="#64748B" stroke="#94A3B8" stroke-width="1.5"/>
+          <path d="M36 60 Q48 68 60 60" fill="none" stroke="#475569" stroke-width="2.5"/>
+          <!-- Floppy Ear & Long Cartoon Dog Snout -->
+          <ellipse cx="33" cy="36" rx="6" ry="13" fill="#6B3E1D"/>
+          <ellipse cx="46" cy="36" rx="16" ry="17" fill="#9C6234"/>
+          <ellipse cx="59" cy="40" rx="14" ry="10" fill="#B07444"/>
+          <!-- Black Nose at Tip of Snout -->
+          <circle cx="71" cy="37" r="4" fill="#0F172A"/>
+          <!-- Chill Half-Lidded Eye & Relaxed Smirk -->
+          <ellipse cx="48" cy="31" rx="3.5" ry="3" fill="#0F172A"/>
+          <line x1="44" y1="29" x2="53" y2="29" stroke="#9C6234" stroke-width="2.5"/>
+          <path d="M50 45 Q60 48 67 43" fill="none" stroke="#1E140C" stroke-width="2" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'moodeng',
+        name: 'Moo Deng',
+        perk: 'Hippo Charge: +25% Firepower',
+        stat: 'atk',
+        val: 0.25,
+        cost: 100,
+        // Authentic Moo Deng: Glossy chubby baby pygmy hippo, wet specular highlights, pink cheeks & chaotic wide eyes
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="100%" height="100%" style="display:block">
+          <defs>
+            <radialGradient id="hippoSkin" cx="40%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#94A3B8"/>
+              <stop offset="60%" stop-color="#52525B"/>
+              <stop offset="100%" stop-color="#27272A"/>
+            </radialGradient>
+          </defs>
+          <rect width="96" height="96" fill="#28104E"/>
+          <!-- Chubby Body -->
+          <ellipse cx="48" cy="84" rx="34" ry="20" fill="#3F3F46"/>
+          <!-- Cute Round Ears -->
+          <circle cx="28" cy="27" r="6.5" fill="#52525B"/>
+          <circle cx="28" cy="27" r="3.5" fill="#FDA4AF"/>
+          <circle cx="68" cy="27" r="6.5" fill="#52525B"/>
+          <circle cx="68" cy="27" r="3.5" fill="#FDA4AF"/>
+          <!-- Glossy Hippo Head & Pink Snout -->
+          <ellipse cx="48" cy="48" rx="28" ry="24" fill="url(#hippoSkin)"/>
+          <ellipse cx="48" cy="57" rx="21" ry="14" fill="#F4A6B8"/>
+          <!-- Wet Specular Shine -->
+          <ellipse cx="36" cy="33" rx="7" ry="3" transform="rotate(-20 36 33)" fill="#FFFFFF" opacity="0.5"/>
+          <!-- Chaotic Wide Eyes -->
+          <circle cx="34" cy="41" r="5" fill="#FFFFFF"/>
+          <circle cx="34" cy="41" r="3" fill="#090D16"/>
+          <circle cx="62" cy="41" r="5" fill="#FFFFFF"/>
+          <circle cx="62" cy="41" r="3" fill="#090D16"/>
+          <!-- Nostrils & Baby Mouth -->
+          <circle cx="41" cy="54" r="2.2" fill="#881337"/>
+          <circle cx="55" cy="54" r="2.2" fill="#881337"/>
+          <path d="M36 62 Q48 69 60 62" fill="none" stroke="#881337" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'pnut',
+        name: 'Peanut ($PNUT)',
+        perk: 'Justice Shield: +35% Defense',
+        stat: 'shield',
+        val: 0.35,
+        cost: 95,
+        // Authentic Peanut: Grey-brown squirrel with fluffy curved tail & tiny brown/gold cowboy hat
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="100%" height="100%" style="display:block">
+          <rect width="96" height="96" fill="#3B1D08"/>
+          <!-- Fluffy Curved Squirrel Tail -->
+          <path d="M62 76 C86 74, 88 38, 68 36 C58 36, 58 52, 64 58 Z" fill="#A8A29E" stroke="#57534E" stroke-width="1.5"/>
+          <!-- Squirrel Body & Cream Belly -->
+          <ellipse cx="44" cy="74" rx="18" ry="20" fill="#78716C"/>
+          <ellipse cx="41" cy="76" rx="10" ry="14" fill="#F5F5F4"/>
+          <!-- Squirrel Head & Chubby Cheeks -->
+          <circle cx="44" cy="46" r="17" fill="#8C827A"/>
+          <circle cx="36" cy="50" r="7" fill="#D6D3D1"/>
+          <circle cx="52" cy="50" r="7" fill="#D6D3D1"/>
+          <!-- Cowboy Hat -->
+          <ellipse cx="44" cy="31" rx="22" ry="5" fill="#92400E" stroke="#FACC15" stroke-width="1.2"/>
+          <path d="M32 31 L35 19 Q44 22 53 19 L56 31 Z" fill="#B45309"/>
+          <!-- Big Dark Eyes & Acorn -->
+          <circle cx="38" cy="44" r="3.2" fill="#0F172A"/>
+          <circle cx="37" cy="43" r="1.1" fill="#FFFFFF"/>
+          <circle cx="50" cy="44" r="3.2" fill="#0F172A"/>
+          <circle cx="49" cy="43" r="1.1" fill="#FFFFFF"/>
+          <ellipse cx="44" cy="49" rx="2.5" ry="1.8" fill="#1C1917"/>
+        </svg>`
+      },
+      {
+        id: 'gigachad',
+        name: 'Gigachad',
+        perk: '100x Conviction: +25% War Score',
+        stat: 'score',
+        val: 0.25,
+        cost: 120,
+        // Authentic Gigachad: Hyper-chiseled monochrome silver/stone jawline, sculpted cheekbones, intense brow & beard
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="100%" height="100%" style="display:block">
+          <defs>
+            <linearGradient id="chadMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#F8FAFC"/>
+              <stop offset="50%" stop-color="#94A3B8"/>
+              <stop offset="100%" stop-color="#334155"/>
+            </linearGradient>
+          </defs>
+          <rect width="96" height="96" fill="#090D16"/>
+          <!-- Muscular Traps & Shoulders -->
+          <path d="M12 96 L24 68 L72 68 L84 96 Z" fill="#1E293B" stroke="#14F195" stroke-width="1.4"/>
+          <!-- Hyper-Chiseled Jawline & Cheekbones -->
+          <polygon points="30,22 66,22 68,46 58,64 38,64 28,46" fill="url(#chadMetal)"/>
+          <!-- Textured Hair -->
+          <path d="M29 26 C30 13, 66 13, 67 26 L63 22 L33 22 Z" fill="#0F172A"/>
+          <!-- Intense Brow & Cheekbone Contour Shadows -->
+          <path d="M33 34 L45 37 M63 34 L51 37" stroke="#0F172A" stroke-width="3" stroke-linecap="round"/>
+          <polygon points="30,44 38,48 36,56" fill="#475569" opacity="0.65"/>
+          <polygon points="66,44 58,48 60,56" fill="#475569" opacity="0.65"/>
+          <!-- Sculpted Beard & Cleft Chin -->
+          <path d="M31 48 L38 64 L58 64 L65 48 L56 54 L40 54 Z" fill="#1E293B" opacity="0.88"/>
+          <line x1="48" y1="58" x2="48" y2="63" stroke="#94A3B8" stroke-width="1.5"/>
+        </svg>`
+      }
+    ];
+
+    const SHIP_SPECS = {
+      interceptor: { id: 'interceptor', name: 'Beanie Scout', energy: 3, gems: 0, dmg: 35, count: 4, speed: 24 },
+      cruiser:     { id: 'cruiser',     name: 'Plasma Cruiser', energy: 4, gems: 70, dmg: 70, count: 2, speed: 19 },
+      mothership:  { id: 'mothership',  name: 'Meme Titan', energy: 6, gems: 140, dmg: 130, count: 1, speed: 15 }
+    };
+
+    const TRENCH_EVENTS = [
+      '🚨 BREAKING: Ansem just called Knit-Prime • ⚠️ WARNING: Whale moving 50M $DGALAXY to Raydium • ⚖️ SEC investigating Kekistan-9 for unregistered memes • ☀️ GM CT! Tap GM in chat for +50💎 & Streak Multiplier • 🔥 Pump.fun fees added +2.8 SOL to Epoch Jackpot!',
+      '💎 DIAMOND HANDS ALERT: Bonk-IV holding key support • 🚀 KOL Raid spotted in outer orbit • 🏎️ Wen Lambo? Spin the Trench Wheel for 100x God Candles & CTO Takeovers!'
+    ];
+
+    const FORT_TIERS = {
+      1: 'Paper Hands Outpost',
+      2: 'Diamond Hands Dome 💎',
+      3: 'HODL Wall 🧱',
+      4: 'Anti-Jeet Laser Grid ⚡'
+    };
+
+    function getFortTierLabel(lv) {
+      if (lv >= 4) return `Lv.${lv} Anti-Jeet Grid ⚡`;
+      if (lv === 3) return 'Lv.3 HODL Wall 🧱';
+      if (lv === 2) return 'Lv.2 Diamond Dome 💎';
+      return 'Lv.1 Outpost';
+    }
+
+    const SPIN_OUTCOMES = [
+      {
+        id: 'godcandle',
+        icon: '🕯️',
+        short: '100x',
+        title: '100x GOD CANDLE 🕯️',
+        banner: '🕯️ 100x GOD CANDLE! +400💎 Aether, +5⚡ Warp Energy & Green Laser Surge!',
+        color: '#14F195'
+      },
+      {
+        id: 'diamond',
+        icon: '💎🙌',
+        short: 'DIAMOND',
+        title: 'DIAMOND HANDS 💎🙌',
+        banner: '💎🙌 DIAMOND HANDS! +25% Permanent Homeworld Shield Boost unlocked!',
+        color: '#38BDF8'
+      },
+      {
+        id: 'cto',
+        icon: '🔥',
+        short: 'CTO',
+        title: 'CTO TAKEOVER 🔥',
+        banner: '🔥 CTO TAKEOVER! Community took over the contract — Next Rally Raid is FREE!',
+        color: '#FB923C'
+      },
+      {
+        id: 'lambo',
+        icon: '🏎️',
+        short: 'LAMBO',
+        title: 'WEN LAMBO 🏎️',
+        banner: '🏎️ WEN LAMBO! +250 War Score & Golden Lambo-Trail (+30% Fleet Speed)!',
+        color: '#FACC15'
+      },
+      {
+        id: 'rug',
+        icon: '📉',
+        short: 'RUGGED',
+        title: 'DEV RUGGED 📉',
+        banner: '📉 DEV SOLD THE TOP (-100💎)! Diamond hand through the dip, anon!',
+        color: '#F43F5E'
+      }
+    ];
+
+    const FLASH_EVENTS = [
+      {
+        id: 'dip',
+        title: '📉 DIP DETECTED! Chart down -42%',
+        desc: 'Jeets are panic-selling! Buy the Dip (💎60) for +300 War Score & 2x next raid, or Paper Hand for +45💎?',
+        btnA: '💎 Buy the Dip (💎60)',
+        btnB: '🧻 Paper Hand (+45💎)'
+      },
+      {
+        id: 'ct_call',
+        title: '📣 CT RAID CALL! Influencers watching',
+        desc: 'Reply "GM" within 10s for free +3⚡ Warp Energy & +100💎 Aether, or fade the call?',
+        btnA: '☀️ Reply "GM" (Free!)',
+        btnB: '😴 Fade CT (+30💎)'
+      }
+    ];
+
+    // =========================================================================
+    // 2. GAME STATE
+    // =========================================================================
+    const state = {
+      started: false,
+      activeDrawer: 'map',
+      hudHidden: false,
+      trackFleet: false,
+      focusPlanetId: null,
+      chatChannel: 'global',
+
+      handle: 'DegenLord.sol',
+      faction: 'wif',
+      tokenTier: 'cadet',
+      walletPubkey: null,
+      walletSolBalance: 0,
+      rankedPassActive: false,
+      socket: null,
+      selectedPlanetId: 'bonk',
+      selectedShip: 'interceptor',
+      swatchColor: '#F472B6',
+
+      energy: 15,
+      maxEnergy: 15,
+      gems: 340,
+      warScore: 450,
+      poolSol: 48.50,
+      epoch: 1,
+      hiredHeroes: [],
+
+      // Viral Meme Mechanics State
+      freeSpinReady: true,
+      freeSpinTimer: 0,
+      isSpinning: false,
+      diamondShieldBuff: false,
+      lamboSpeedBuff: false,
+      freeRallyReady: false,
+      gmStreak: 0,
+      gmCooldown: 0,
+      flashEvent: null,
+      flashTimer: 0,
+      nextFlashIn: 24,
+
+      myTeamId: 'team_wif',
+      teams: {
+        team_wif:  { id: 'team_wif',  tag: 'WIF',  name: 'Hat Stays On Cartel', color: '#F472B6', split: '60% Equal / 40% Top Raiders', members: 4 },
+        team_bonk: { id: 'team_bonk', tag: 'BONK', name: 'Bonk Marines DAO',    color: '#FB923C', split: '50% Equal / 50% Top Raiders', members: 5 },
+        team_pepe: { id: 'team_pepe', tag: 'PEPE', name: 'Kekistan Trenchers',  color: '#4ADE80', split: '100% Equal Member Share',     members: 3 }
+      },
+
+      planets: {},
+      fleets: [],
+      convoys: [],
+      lasers: [],
+      particles: [],
+      messages: [
+        { chan: 'global', sender: '0xShiba.sol', tag: 'WIF', color: '#F472B6', text: 'Jackpot at 48.5 SOL! Rallying on Bonk-IV!' },
+        { chan: 'global', sender: 'BonkMaxi', tag: 'BONK', color: '#FB923C', text: 'Try touching Bonk-IV and get bonked!' },
+        { chan: 'team', sender: 'KnitQueen', tag: 'WIF', color: '#F472B6', text: 'Hat stays on! Ready for coordinated rally.' }
+      ],
+      ecoTimer: 0,
+      aiTimer: 0,
+      eventIdx: 0,
+      victoryTriggered: false
+    };
+
+    function getMyTeam() { return state.myTeamId ? state.teams[state.myTeamId] : null; }
+    function getGmMultiplier() {
+      return Math.min(1.5, 1.0 + state.gmStreak * 0.1);
+    }
+
+    function triggerGmStreak() {
+      if (state.gmCooldown > 0) {
+        setTicker(`☀️ GM already sent! Next GM bonus ready in ${Math.ceil(state.gmCooldown)}s.`);
+        return;
+      }
+      state.gmStreak = Math.min(5, state.gmStreak + 1);
+      state.gmCooldown = 12;
+      state.gems += 50;
+      const mult = getGmMultiplier().toFixed(1);
+      const t = getMyTeam();
+      pushChat('global', state.handle, t?.tag || 'GM', t?.color || '#FACC15', `☀️ GM CT! (Streak ${state.gmStreak} • ${mult}x War Score)`);
+      setTicker(`☀️ GM! +50💎 Aether & ${mult}x War Score Streak Multiplier active!`);
+      const home = state.planets[state.faction];
+      if (home) {
+        spawnCombatCallout(home.pos3D, `☀️ GM ${mult}x!`, '#FACC15');
+        spawnExplosion(home.pos3D, 0xfacc15);
+      }
+      updateUI();
+    }
+
+    function spawnCombatCallout(pos3D, text, color = '#14F195') {
+      if (!gfx.ready || state.hudHidden) return;
+      const v = new THREE.Vector3(pos3D.x, 3.6, pos3D.z);
+      v.project(gfx.camera);
+      if (v.z > 1) return;
+      const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-(v.y * 0.5) + 0.5) * window.innerHeight;
+      const el = document.createElement('div');
+      el.style.left = `${sx}px`;
+      el.style.top = `${sy}px`;
+      el.style.color = color;
+      el.className = 'combat-callout absolute font-mono font-black text-xs sm:text-sm pointer-events-none whitespace-nowrap';
+      el.textContent = text;
+      document.getElementById('combat-callouts-layer').appendChild(el);
+      setTimeout(() => el.remove(), 1150);
+    }
+
+    function triggerTrenchSpin() {
+      if (state.isSpinning) return;
+      if (!state.freeSpinReady) {
+        if (state.gems < 80) {
+          setTicker('Need 💎80 Aether Gems for an extra Trench Spin (or wait for Free Spin)!');
+          return;
+        }
+        state.gems -= 80;
+      } else {
+        state.freeSpinReady = false;
+        state.freeSpinTimer = 35;
+      }
+
+      state.isSpinning = true;
+      updateUI();
+
+      const reels = [0, 1, 2].map(i => document.getElementById(`reel-${i}`));
+      let ticks = 0;
+      const spinInterval = setInterval(() => {
+        ticks++;
+        reels.forEach(r => {
+          const rnd = SPIN_OUTCOMES[Math.floor(Math.random() * SPIN_OUTCOMES.length)];
+          r.innerHTML = `<span class="text-xl">${rnd.icon}</span><span class="text-[9px] font-mono font-bold" style="color:${rnd.color}">${rnd.short}</span>`;
+        });
+        if (ticks >= 14) {
+          clearInterval(spinInterval);
+          // 80% Pump odds, 20% Rug odds
+          const roll = Math.random();
+          const outcome = roll < 0.25 ? SPIN_OUTCOMES[0]
+            : roll < 0.45 ? SPIN_OUTCOMES[1]
+            : roll < 0.65 ? SPIN_OUTCOMES[2]
+            : roll < 0.80 ? SPIN_OUTCOMES[3]
+            : SPIN_OUTCOMES[4];
+
+          reels.forEach(r => {
+            r.innerHTML = `<span class="text-xl">${outcome.icon}</span><span class="text-[9px] font-mono font-bold" style="color:${outcome.color}">${outcome.short}</span>`;
+          });
+
+          const home = state.planets[state.faction];
+          if (outcome.id === 'godcandle') {
+            state.gems += 400;
+            state.energy = Math.min(state.maxEnergy, state.energy + 5);
+            if (home) { spawnExplosion(home.pos3D, 0x14f195); spawnCombatCallout(home.pos3D, '🕯️ 100x GOD CANDLE!', '#14F195'); }
+          } else if (outcome.id === 'diamond') {
+            state.diamondShieldBuff = true;
+            if (home) { home.maxHp = Math.round(home.maxHp * 1.25); home.hp = home.maxHp; spawnCombatCallout(home.pos3D, '💎🙌 +25% SHIELD!', '#38BDF8'); }
+          } else if (outcome.id === 'cto') {
+            state.freeRallyReady = true;
+            if (home) spawnCombatCallout(home.pos3D, '🔥 CTO FREE RALLY!', '#FB923C');
+          } else if (outcome.id === 'lambo') {
+            state.lamboSpeedBuff = true;
+            state.warScore += Math.round(250 * getGmMultiplier());
+            if (home) { spawnExplosion(home.pos3D, 0xfacc15); spawnCombatCallout(home.pos3D, '🏎️ WEN LAMBO!', '#FACC15'); }
+          } else if (outcome.id === 'rug') {
+            state.gems = Math.max(0, state.gems - 100);
+            if (home) { spawnExplosion(home.pos3D, 0xf43f5e); spawnCombatCallout(home.pos3D, '📉 DEV RUGGED!', '#F43F5E'); }
+          }
+
+          document.getElementById('spin-result-banner').textContent = outcome.banner;
+          document.getElementById('spin-result-banner').style.color = outcome.color;
+          setTicker(outcome.banner);
+          state.isSpinning = false;
+          updateUI();
+        }
+      }, 75);
+    }
+
+    function triggerFlashEvent() {
+      if (state.flashEvent || !state.started) return;
+      const ev = FLASH_EVENTS[Math.floor(Math.random() * FLASH_EVENTS.length)];
+      state.flashEvent = ev;
+      state.flashTimer = 10;
+      const card = document.getElementById('flash-event-card');
+      document.getElementById('flash-event-title').textContent = ev.title;
+      document.getElementById('flash-event-desc').textContent = ev.desc;
+      document.getElementById('flash-choice-a').textContent = ev.btnA;
+      document.getElementById('flash-choice-b').textContent = ev.btnB;
+      card.classList.remove('hidden');
+    }
+
+    function resolveFlashChoice(choice) {
+      const ev = state.flashEvent;
+      if (!ev) return;
+      if (ev.id === 'dip') {
+        if (choice === 'a') {
+          if (state.gems < 60) {
+            setTicker('Need 💎60 Aether Gems to Buy the Dip!');
+            return;
+          }
+          state.gems -= 60;
+          const pts = Math.round(300 * getGmMultiplier());
+          state.warScore += pts;
+          state.freeRallyReady = true;
+          setTicker(`💎 BOUGHT THE DIP! +${pts} War Score & Free CTO Rally unlocked!`);
+        } else {
+          state.gems += 45;
+          setTicker('🧻 Paper-handed the dip (+45💎).');
+        }
+      } else {
+        if (choice === 'a') {
+          state.energy = Math.min(state.maxEnergy, state.energy + 3);
+          state.gems += 100;
+          triggerGmStreak();
+        } else {
+          state.gems += 30;
+          setTicker('😴 Faded CT call (+30💎).');
+        }
+      }
+      state.flashEvent = null;
+      document.getElementById('flash-event-card').classList.add('hidden');
+      updateUI();
+    }
+
+    function getTeamForOwner(ownerId) {
+      if (ownerId === state.faction) return getMyTeam();
+      if (ownerId === 'wif') return state.teams.team_wif;
+      if (ownerId === 'bonk') return state.teams.team_bonk;
+      if (ownerId === 'pepe') return state.teams.team_pepe;
+      return null;
+    }
+
+    function initGalaxy() {
+      state.planets = {};
+      state.fleets = [];
+      state.convoys = [];
+      state.lasers = [];
+      state.victoryTriggered = false;
+
+      Object.values(FACTIONS).forEach(f => {
+        const maxHp = Math.round(100 * f.shieldMult);
+        state.planets[f.id] = {
+          id: f.id,
+          name: f.homeworld,
+          owner: f.id,
+          hp: maxHp,
+          maxHp,
+          level: 1,
+          orbitRadius: f.orbitRadius,
+          orbitSpeed: f.orbitSpeed,
+          orbitPhase: f.orbitPhase,
+          radius3D: f.radius3D,
+          hasRing: f.hasRing,
+          palette: f.palette,
+          atmoInt: f.atmoInt,
+          pos3D: { x: Math.cos(f.orbitPhase) * f.orbitRadius, y: 0, z: Math.sin(f.orbitPhase) * f.orbitRadius },
+          garrison: 3
+        };
+      });
+
+      const moons = [
+        { id: 'pumpmoon', name: 'Pump-Moon', orbitRadius: 34.5, orbitSpeed: 0.095, orbitPhase: 1.1, radius3D: 2.25, hp: 75, palette: { ocean: '#3B0764', land1: '#9333EA', land2: '#14F195' }, atmoInt: 0x14f195 },
+        { id: 'rugrock',  name: 'Rug-Rock',  orbitRadius: 55.0, orbitSpeed: 0.055, orbitPhase: 4.3, radius3D: 2.40, hp: 85, palette: { ocean: '#1E293B', land1: '#64748B', land2: '#FACC15' }, atmoInt: 0xfacc15 }
+      ];
+      moons.forEach(m => {
+        state.planets[m.id] = {
+          ...m,
+          owner: 'neutral',
+          maxHp: m.hp,
+          level: 1,
+          hasRing: false,
+          pos3D: { x: Math.cos(m.orbitPhase) * m.orbitRadius, y: 0, z: Math.sin(m.orbitPhase) * m.orbitRadius },
+          garrison: 1
+        };
+      });
+
+      const rivals = Object.keys(FACTIONS).filter(k => k !== state.faction);
+      state.selectedPlanetId = rivals[0];
+      if (gfx.ready) rebuild3DPlanets();
+      updateUI();
+    }
+
+    // =========================================================================
+    // 3. CINEMATIC 3D THREE.JS SCENE (BLOOM, GLSL SHADERS & MEME WARSHIPS)
+    // =========================================================================
+    const gfx = {
+      ready: false,
+      scene: null,
+      camera: null,
+      renderer: null,
+      composer: null,
+      solarMat: null,
+      planetMeshes: {},
+      fleetMeshes: new Map(),
+      convoyMeshes: new Map(),
+      laserLines: [],
+      explosionMeshes: [],
+      raycaster: null,
+      pointer: null,
+      camTarget: new THREE.Vector3(0, 0, 0),
+      sph: { radius: 92, theta: 0.55, phi: 1.02 },
+      drag: { active: false, moved: false, sx: 0, sy: 0, pinchDist: 0 }
+    };
+
+    const SOLAR_VERT = `
+      varying vec3 vNormal; varying vec3 vPos;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    const SOLAR_FRAG = `
+      uniform float uTime;
+      varying vec3 vNormal; varying vec3 vPos;
+      float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float noise(vec3 x) {
+        vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x), mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+                   mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x), mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+      }
+      void main() {
+        float n = noise(vPos * 0.65 + vec3(uTime * 0.45));
+        vec3 col = mix(vec3(0.60, 0.27, 1.0), vec3(0.08, 0.95, 0.58), smoothstep(0.25, 0.72, n));
+        col = mix(col, vec3(1.0, 0.95, 0.55), smoothstep(0.72, 0.98, n));
+        float rim = 1.0 - max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0);
+        col += vec3(0.22, 0.75, 0.98) * pow(rim, 2.2);
+        gl_FragColor = vec4(col * 1.25, 1.0);
+      }
+    `;
+
+    const ATMO_VERT = `
+      varying vec3 vNormal;
+      void main() { vNormal = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    `;
+    const ATMO_FRAG = `
+      uniform vec3 uColor; varying vec3 vNormal;
+      void main() {
+        float intensity = pow(0.68 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.4);
+        gl_FragColor = vec4(uColor, clamp(intensity * 1.35, 0.0, 0.9));
+      }
+    `;
+
+    function makePlanetPBR(id, pal) {
+      const w = 512, h = 256;
+      const cA = document.createElement('canvas'); cA.width = w; cA.height = h;
+      const cB = document.createElement('canvas'); cB.width = w; cB.height = h;
+      const cE = document.createElement('canvas'); cE.width = w; cE.height = h;
+      const ctxA = cA.getContext('2d'), ctxB = cB.getContext('2d'), ctxE = cE.getContext('2d');
+
+      ctxA.fillStyle = pal.ocean; ctxA.fillRect(0, 0, w, h);
+      ctxB.fillStyle = '#222'; ctxB.fillRect(0, 0, w, h);
+      ctxE.fillStyle = '#000'; ctxE.fillRect(0, 0, w, h);
+
+      let seed = id.split('').reduce((a, c) => a + c.charCodeAt(0) * 131, 42);
+      const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+
+      for (let i = 0; i < 52; i++) {
+        const x = rnd() * w, y = 24 + rnd() * (h - 48), rx = 18 + rnd() * 50, ry = 10 + rnd() * 28;
+        ctxA.fillStyle = i % 2 === 0 ? pal.land1 : pal.land2;
+        ctxA.beginPath(); ctxA.ellipse(x, y, rx, ry, rnd() * Math.PI, 0, Math.PI * 2); ctxA.fill();
+        ctxB.fillStyle = i % 2 === 0 ? '#999' : '#E5E5E5';
+        ctxB.beginPath(); ctxB.ellipse(x, y, rx * 0.85, ry * 0.85, 0, 0, Math.PI * 2); ctxB.fill();
+        if (rnd() < 0.5) {
+          ctxE.fillStyle = '#FFE082';
+          for (let j = 0; j < 5; j++) ctxE.fillRect(x + (rnd() - 0.5) * rx, y + (rnd() - 0.5) * ry, 2, 2);
+        }
+      }
+      return {
+        map: new THREE.CanvasTexture(cA),
+        bumpMap: new THREE.CanvasTexture(cB),
+        emissiveMap: new THREE.CanvasTexture(cE)
+      };
+    }
+
+    // Faction-Distinct 3D Meme Warships (Beanie dome, Plasma-Bat prow, Frog-Wing saucer, Cat-Ear fighter)
+    function buildMemeWarshipMesh(shipType, factionId, colorInt) {
+      const grp = new THREE.Group();
+      const s = shipType === 'mothership' ? 1.65 : (shipType === 'cruiser' ? 1.2 : 0.88);
+      const hullMat = new THREE.MeshStandardMaterial({
+        color: 0x94a3b8, metalness: 0.85, roughness: 0.25, emissive: colorInt, emissiveIntensity: 0.32
+      });
+      const accentMat = new THREE.MeshStandardMaterial({ color: colorInt, metalness: 0.6, roughness: 0.25 });
+      const glowMat = new THREE.MeshBasicMaterial({ color: colorInt });
+
+      if (factionId === 'pepe') {
+        // Frog-Wing Saucer Dreadnought
+        const saucer = new THREE.Mesh(new THREE.CylinderGeometry(0.95 * s, 1.25 * s, 0.35 * s, 16), hullMat);
+        grp.add(saucer);
+        const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.28 * s, 10, 10), accentMat);
+        eyeL.position.set(-0.42 * s, 0.24 * s, 0.45 * s);
+        const eyeR = eyeL.clone();
+        eyeR.position.x = 0.42 * s;
+        grp.add(eyeL, eyeR);
+      } else if (factionId === 'bonk') {
+        // Plasma-Bat Cruiser
+        const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.45 * s, 0.2 * s, 2.7 * s, 12), accentMat);
+        bat.rotation.x = Math.PI / 2;
+        grp.add(bat);
+        const wings = new THREE.Mesh(new THREE.BoxGeometry(2.1 * s, 0.1 * s, 0.6 * s), hullMat);
+        wings.position.z = -0.4 * s;
+        grp.add(wings);
+      } else {
+        // Sleek Interceptor with Beanie Dome (WIF) or Cat-Ear Fins (POPCAT)
+        const body = new THREE.Mesh(new THREE.ConeGeometry(0.48 * s, 2.4 * s, 8), hullMat);
+        body.rotation.x = Math.PI / 2;
+        grp.add(body);
+        const wings = new THREE.Mesh(new THREE.BoxGeometry(2.2 * s, 0.08 * s, 0.72 * s), hullMat);
+        wings.position.z = -0.2 * s;
+        grp.add(wings);
+
+        if (factionId === 'wif') {
+          const beanie = new THREE.Mesh(new THREE.SphereGeometry(0.36 * s, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), accentMat);
+          beanie.position.set(0, 0.2 * s, 0.1 * s);
+          grp.add(beanie);
+        } else if (factionId === 'popcat') {
+          const earL = new THREE.Mesh(new THREE.ConeGeometry(0.22 * s, 0.55 * s, 4), accentMat);
+          earL.position.set(-0.34 * s, 0.34 * s, 0.1 * s);
+          const earR = earL.clone();
+          earR.position.x = 0.34 * s;
+          grp.add(earL, earR);
+        }
+      }
+
+      const thruster = new THREE.Mesh(new THREE.SphereGeometry(0.28 * s, 8, 8), glowMat);
+      thruster.position.z = -1.25 * s;
+      grp.add(thruster);
+      return grp;
+    }
+
+    function init3DScene() {
+      if (!window.THREE) return;
+      const container = document.getElementById('canvas-container');
+      gfx.scene = new THREE.Scene();
+      gfx.scene.fog = new THREE.FogExp2(0x060913, 0.0034);
+
+      gfx.camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 650);
+      gfx.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      gfx.renderer.setSize(window.innerWidth, window.innerHeight);
+      gfx.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      gfx.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      gfx.renderer.toneMappingExposure = 1.15;
+      container.innerHTML = '';
+      container.appendChild(gfx.renderer.domElement);
+
+      // Selective UnrealBloomPass with automatic fallback
+      try {
+        if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass) {
+          gfx.composer = new THREE.EffectComposer(gfx.renderer);
+          gfx.composer.addPass(new THREE.RenderPass(gfx.scene, gfx.camera));
+          const bloom = new THREE.UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.75, 0.55, 0.78
+          );
+          gfx.composer.addPass(bloom);
+        }
+      } catch {
+        gfx.composer = null;
+      }
+
+      gfx.scene.add(new THREE.AmbientLight(0x334155, 1.15));
+      gfx.scene.add(new THREE.HemisphereLight(0x38bdf8, 0x1e1b4b, 0.95));
+      gfx.scene.add(new THREE.PointLight(0x14f195, 2.6, 240));
+
+      gfx.solarMat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: SOLAR_VERT,
+        fragmentShader: SOLAR_FRAG
+      });
+      gfx.scene.add(new THREE.Mesh(new THREE.SphereGeometry(6.2, 32, 32), gfx.solarMat));
+
+      const starGeo = new THREE.BufferGeometry();
+      const verts = [], cols = [];
+      const palette = [new THREE.Color(0xf8fafc), new THREE.Color(0x14f195), new THREE.Color(0xf472b6), new THREE.Color(0x38bdf8)];
+      for (let i = 0; i < 1600; i++) {
+        verts.push((Math.random() - 0.5) * 400, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 400);
+        const c = palette[i % palette.length];
+        cols.push(c.r, c.g, c.b);
+      }
+      starGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      starGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+      gfx.scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 0.85, vertexColors: true })));
+
+      gfx.raycaster = new THREE.Raycaster();
+      gfx.pointer = new THREE.Vector2();
+
+      const dom = gfx.renderer.domElement;
+      dom.addEventListener('pointerdown', (e) => {
+        gfx.drag.active = true;
+        gfx.drag.moved = false;
+        gfx.drag.sx = e.clientX;
+        gfx.drag.sy = e.clientY;
+      });
+      dom.addEventListener('pointermove', (e) => {
+        if (!gfx.drag.active) return;
+        const dx = e.clientX - gfx.drag.sx;
+        const dy = e.clientY - gfx.drag.sy;
+        if (Math.hypot(dx, dy) > 6) gfx.drag.moved = true;
+        gfx.sph.theta -= dx * 0.0075;
+        gfx.sph.phi = Math.max(0.24, Math.min(1.42, gfx.sph.phi - dy * 0.0075));
+        gfx.drag.sx = e.clientX;
+        gfx.drag.sy = e.clientY;
+      });
+      dom.addEventListener('pointerup', (e) => {
+        gfx.drag.active = false;
+        if (gfx.drag.moved) return;
+        gfx.pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        gfx.pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        gfx.raycaster.setFromCamera(gfx.pointer, gfx.camera);
+        const spheres = Object.values(gfx.planetMeshes).map(p => p.sphere);
+        const hits = gfx.raycaster.intersectObjects(spheres);
+        if (hits.length > 0 && hits[0].object.userData.planetId) {
+          selectPlanet(hits[0].object.userData.planetId);
+        }
+      });
+      dom.addEventListener('wheel', (e) => {
+        gfx.sph.radius = Math.max(22, Math.min(145, gfx.sph.radius + e.deltaY * 0.05));
+      }, { passive: true });
+      dom.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          gfx.drag.pinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+        }
+      }, { passive: true });
+      dom.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+          const d = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const diff = gfx.drag.pinchDist - d;
+          gfx.sph.radius = Math.max(22, Math.min(145, gfx.sph.radius + diff * 0.18));
+          gfx.drag.pinchDist = d;
+        }
+      }, { passive: true });
+
+      gfx.ready = true;
+      rebuild3DPlanets();
+    }
+
+    function rebuild3DPlanets() {
+      if (!gfx.ready) return;
+      Object.values(gfx.planetMeshes).forEach(entry => {
+        gfx.scene.remove(entry.group);
+        gfx.scene.remove(entry.orbitRing);
+      });
+      gfx.planetMeshes = {};
+
+      Object.values(state.planets).forEach(pl => {
+        const team = getTeamForOwner(pl.owner);
+        const hex = team ? team.color : (FACTIONS[pl.owner]?.hex || '#94A3B8');
+        const colInt = new THREE.Color(hex).getHex();
+
+        const orbitRing = new THREE.Mesh(
+          new THREE.RingGeometry(pl.orbitRadius - 0.14, pl.orbitRadius + 0.14, 96),
+          new THREE.MeshBasicMaterial({ color: colInt, side: THREE.DoubleSide, transparent: true, opacity: 0.28 })
+        );
+        orbitRing.rotation.x = Math.PI / 2;
+        gfx.scene.add(orbitRing);
+
+        const group = new THREE.Group();
+        const maps = makePlanetPBR(pl.id, pl.palette);
+        const sphere = new THREE.Mesh(
+          new THREE.SphereGeometry(pl.radius3D, 32, 32),
+          new THREE.MeshStandardMaterial({
+            map: maps.map, bumpMap: maps.bumpMap, bumpScale: 0.2,
+            emissiveMap: maps.emissiveMap, emissive: new THREE.Color(0xffe082), emissiveIntensity: 0.8,
+            roughness: 0.5, metalness: 0.12
+          })
+        );
+        sphere.userData.planetId = pl.id;
+        group.add(sphere);
+
+        const atmoMat = new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: new THREE.Color(pl.atmoInt) } },
+          vertexShader: ATMO_VERT,
+          fragmentShader: ATMO_FRAG,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        group.add(new THREE.Mesh(new THREE.SphereGeometry(pl.radius3D * 1.18, 24, 24), atmoMat));
+
+        const shieldDome = new THREE.Mesh(
+          new THREE.IcosahedronGeometry(pl.radius3D * 1.32, 1),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true, transparent: true, opacity: 0.3 })
+        );
+        shieldDome.visible = pl.level >= 2;
+        group.add(shieldDome);
+
+        const teamRing = new THREE.Mesh(
+          new THREE.RingGeometry(pl.radius3D * 1.46, pl.radius3D * (pl.hasRing ? 1.85 : 1.64), 48),
+          new THREE.MeshBasicMaterial({ color: colInt, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+        );
+        teamRing.rotation.x = Math.PI / 2 + (pl.hasRing ? 0.22 : 0);
+        group.add(teamRing);
+
+        const selRing = new THREE.Mesh(
+          new THREE.RingGeometry(pl.radius3D * 1.92, pl.radius3D * 2.1, 48),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+        );
+        selRing.rotation.x = Math.PI / 2;
+        group.add(selRing);
+
+        const garrisonGrp = new THREE.Group();
+        for (let i = 0; i < pl.garrison; i++) {
+          const ship = buildMemeWarshipMesh(i === 0 && pl.level >= 3 ? 'cruiser' : 'interceptor', pl.owner, colInt);
+          const a = (i / pl.garrison) * Math.PI * 2;
+          const r = pl.radius3D * 2.05;
+          ship.position.set(Math.cos(a) * r, i % 2 === 0 ? 0.5 : -0.5, Math.sin(a) * r);
+          ship.rotation.y = -a;
+          garrisonGrp.add(ship);
+        }
+        group.add(garrisonGrp);
+
+        gfx.scene.add(group);
+        gfx.planetMeshes[pl.id] = { group, sphere, shieldDome, selRing, orbitRing, garrisonGrp };
+      });
+    }
+
+    function updateFloatingPlanetLabels() {
+      if (!gfx.ready || state.hudHidden) return;
+      const layer = document.getElementById('planet-labels-layer');
+      layer.innerHTML = '';
+
+      Object.values(state.planets).forEach(pl => {
+        const v = new THREE.Vector3(pl.pos3D.x, pl.radius3D + 2.2, pl.pos3D.z);
+        v.project(gfx.camera);
+        if (v.z > 1) return;
+        const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+        const sy = (-(v.y * 0.5) + 0.5) * window.innerHeight;
+        if (sx < 28 || sx > window.innerWidth - 28 || sy < 95 || sy > window.innerHeight - 105) return;
+
+        const team = getTeamForOwner(pl.owner);
+        const isSel = pl.id === state.selectedPlanetId;
+        const badge = document.createElement('div');
+        badge.style.left = `${sx}px`;
+        badge.style.top = `${sy}px`;
+        badge.style.borderColor = isSel ? '#FACC15' : (team ? team.color : '#64748B');
+        badge.className = 'absolute -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-void/85 border text-[9px] font-mono whitespace-nowrap shadow';
+        const tag = team ? `<span style="color:${team.color}" class="font-extrabold">[${team.tag}]</span> ` : '';
+        badge.innerHTML = `${tag}<span class="text-white font-bold">${pl.name}</span>`;
+        layer.appendChild(badge);
+      });
+    }
+
+    // =========================================================================
+    // 4. RAIDS, RALLIES, EXPLOSION PARTICLES & SIMULATION
+    // =========================================================================
+    let uidCounter = 1;
+
+    function spawnSquadron(fromPl, toPl, attackerOwner, totalDmg, shipType) {
+      const spec = SHIP_SPECS[shipType] || SHIP_SPECS.interceptor;
+      const fData = FACTIONS[attackerOwner];
+      const lamboMult = (attackerOwner === state.faction && state.lamboSpeedBuff) ? 1.30 : 1.0;
+      const spd = spec.speed * (fData ? fData.speedMult : 1.0) * lamboMult;
+
+      for (let i = 0; i < spec.count; i++) {
+        const a = (i / spec.count) * Math.PI * 2;
+        state.fleets.push({
+          uid: uidCounter++,
+          attackerOwner,
+          targetId: toPl.id,
+          shipType: spec.id,
+          dmg: totalDmg / spec.count,
+          phase: 'transit',
+          dogfightTime: 1.6 + Math.random() * 0.4,
+          orbitAngle: a,
+          fireCd: 0.25,
+          pos3D: {
+            x: fromPl.pos3D.x + Math.cos(a) * 2.6,
+            y: i % 2 === 0 ? 1.2 : -1.2,
+            z: fromPl.pos3D.z + Math.sin(a) * 2.6
+          },
+          speed: spd + Math.random() * 2
+        });
+      }
+    }
+
+    function getRaidEnergyCost() {
+      const base = SHIP_SPECS[state.selectedShip].energy;
+      const save = state.hiredHeroes.includes('chillguy') ? 1 : 0;
+      return Math.max(1, base - save);
+    }
+
+    function executeRaid(isRally = false) {
+      const target = state.planets[state.selectedPlanetId];
+      const home = state.planets[state.faction];
+      if (!target || !home) return;
+
+      if (target.owner === state.faction) {
+        setTicker('Select a rival or neutral meme world on the 3D map to raid!');
+        return;
+      }
+
+      const spec = SHIP_SPECS[state.selectedShip];
+      const useFreeCto = state.freeRallyReady;
+      const eCost = useFreeCto ? 0 : getRaidEnergyCost();
+      if (state.energy < eCost) {
+        setTicker(`Out of Warp Energy! Need ⚡${eCost} (recharging fast).`);
+        return;
+      }
+      if (!useFreeCto && state.gems < spec.gems) {
+        setTicker(`Need 💎${spec.gems} Aether Gems for ${spec.name}!`);
+        return;
+      }
+
+      state.energy -= eCost;
+      if (!useFreeCto) state.gems -= spec.gems;
+      if (useFreeCto) state.freeRallyReady = false;
+
+      const fData = FACTIONS[state.faction];
+      const heroAtk = state.hiredHeroes.includes('moodeng') ? 1.25 : 1.0;
+      const tierAtk = state.tokenTier === 'admiral' ? 1.15 : (state.tokenTier === 'commander' ? 1.05 : 1.0);
+      const dmg = Math.round((spec.dmg + home.level * 12) * fData.atkMult * heroAtk * tierAtk);
+
+      spawnSquadron(home, target, state.faction, dmg, spec.id);
+
+      let alliesLaunched = 0;
+      const myTeam = getMyTeam();
+      if (isRally && myTeam) {
+        Object.values(state.planets).forEach(pl => {
+          if (pl.id !== home.id && pl.owner !== 'neutral' && pl.owner !== target.owner) {
+            spawnSquadron(pl, target, pl.owner, 42, 'cruiser');
+            alliesLaunched++;
+          }
+        });
+      }
+
+      closeDrawer();
+      if (isRally) {
+        const tag = myTeam ? `[${myTeam.tag}]` : '[ALLIANCE]';
+        setTicker(`📣 ${tag} TEAM RALLY! ${1 + alliesLaunched} meme squadrons converging on ${target.name}!`);
+        pushChat('team', state.handle, myTeam?.tag || 'ALLY', myTeam?.color || '#14F195', `📣 RALLY CALLED ON ${target.name.toUpperCase()}!`);
+      } else {
+        setTicker(`⚔️ ${spec.name} squadron launched at ${target.name}!`);
+      }
+      updateUI();
+    }
+
+    function upgradeHomeShield() {
+      const home = state.planets[state.faction];
+      if (!home) return;
+      const cost = Math.round(110 * Math.pow(1.35, home.level - 1));
+      if (state.gems < cost) {
+        setTicker(`Need 💎${cost} Aether Gems to upgrade ${home.name} shields!`);
+        return;
+      }
+      state.gems -= cost;
+      home.level += 1;
+      const heroShield = state.hiredHeroes.includes('pnut') ? 1.35 : 1.0;
+      home.maxHp = Math.round((home.maxHp + 35) * (heroShield > 1 ? 1.08 : 1.0));
+      home.hp = home.maxHp;
+      home.garrison = Math.min(8, home.garrison + 1);
+      rebuild3DPlanets();
+      setTicker(`🛡️ ${home.name} upgraded to Lv.${home.level} (Hex Shield Dome Active)!`);
+      updateUI();
+    }
+
+    function spawnExplosion(pos, colInt) {
+      if (!gfx.ready) return;
+      const ring = new THREE.Mesh(
+        new THREE.SphereGeometry(0.9, 12, 12),
+        new THREE.MeshBasicMaterial({ color: colInt, wireframe: true, transparent: true, opacity: 1 })
+      );
+      ring.position.set(pos.x, pos.y, pos.z);
+      gfx.scene.add(ring);
+      gfx.explosionMeshes.push({ mesh: ring, life: 0.35 });
+    }
+
+    function handleCombatImpact(target, dmg, attackerOwner) {
+      target.hp -= dmg;
+      const hex = FACTIONS[attackerOwner]?.hex || '#14F195';
+      spawnExplosion(target.pos3D, new THREE.Color(hex).getHex());
+
+      const callouts = attackerOwner === state.faction
+        ? ['BONK!', '100x!', 'WAGMI!', 'SEND IT!', 'GIGA HIT!']
+        : ['JEETED!', 'REKT!', 'NGMI!', 'RUGGED!'];
+      const label = callouts[Math.floor(Math.random() * callouts.length)];
+      spawnCombatCallout(target.pos3D, `${label} -${Math.round(dmg)}`, hex);
+
+      if (target.hp <= 0) {
+        target.owner = attackerOwner;
+        target.hp = Math.round(target.maxHp * 0.75);
+        target.garrison = 3;
+        rebuild3DPlanets();
+
+        if (attackerOwner === state.faction) {
+          const scoreMult = (state.hiredHeroes.includes('gigachad') ? 1.25 : 1.0) * getGmMultiplier();
+          const pts = Math.round(250 * scoreMult);
+          state.warScore += pts;
+          state.gems += 110;
+          setTicker(`🏆 ${target.name} CAPTURED! +${pts} War Score & +110💎!`);
+          pushChat('global', state.handle, getMyTeam()?.tag || FACTIONS[state.faction].ticker.replace('$', ''), FACTIONS[state.faction].hex, `Captured ${target.name}!`);
+        } else {
+          const f = FACTIONS[attackerOwner];
+          setTicker(`⚠️ ${f ? f.name : 'Rivals'} captured ${target.name}!`);
+        }
+        checkVictory();
+      }
+    }
+
+    function spawnSupplyConvoy() {
+      const owned = Object.values(state.planets).filter(p => p.owner === state.faction);
+      const all = Object.values(state.planets);
+      const from = owned[0] || all[0];
+      const to = all.find(p => p.id !== from.id) || all[1];
+      state.convoys.push({ uid: uidCounter++, fromId: from.id, toId: to.id, progress: 0 });
+      setTicker(`🚚 Golden 3D Supply Convoy dispatched from ${from.name} → ${to.name}!`);
+    }
+
+    function spawnLaserBeam(p1, p2, colInt) {
+      if (!gfx.ready) return;
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.x, p1.y, p1.z),
+        new THREE.Vector3(p2.x, p2.y, p2.z)
+      ]);
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: colInt, transparent: true, opacity: 1 }));
+      gfx.scene.add(line);
+      gfx.laserLines.push({ line, life: 0.18 });
+    }
+
+    function stepSimulation(dt) {
+      Object.values(state.planets).forEach(pl => {
+        pl.orbitPhase += pl.orbitSpeed * dt;
+        pl.pos3D.x = Math.cos(pl.orbitPhase) * pl.orbitRadius;
+        pl.pos3D.z = Math.sin(pl.orbitPhase) * pl.orbitRadius;
+        if (pl.hp < pl.maxHp) pl.hp = Math.min(pl.maxHp, pl.hp + dt * (1.1 + pl.level * 0.4));
+      });
+
+      for (let i = state.fleets.length - 1; i >= 0; i--) {
+        const f = state.fleets[i];
+        const target = state.planets[f.targetId];
+        if (!target) { state.fleets.splice(i, 1); continue; }
+
+        if (f.phase === 'transit') {
+          const dx = target.pos3D.x - f.pos3D.x;
+          const dy = target.pos3D.y - f.pos3D.y;
+          const dz = target.pos3D.z - f.pos3D.z;
+          const dist = Math.hypot(dx, dy, dz);
+          if (dist <= target.radius3D * 1.9) {
+            f.phase = 'dogfight';
+          } else {
+            f.pos3D.x += (dx / dist) * f.speed * dt;
+            f.pos3D.y += (dy / dist) * f.speed * dt;
+            f.pos3D.z += (dz / dist) * f.speed * dt;
+          }
+        } else {
+          f.dogfightTime -= dt;
+          f.orbitAngle += 3.4 * dt;
+          const r = target.radius3D * 2.0;
+          f.pos3D.x = target.pos3D.x + Math.cos(f.orbitAngle) * r;
+          f.pos3D.z = target.pos3D.z + Math.sin(f.orbitAngle) * r;
+
+          f.fireCd -= dt;
+          if (f.fireCd <= 0) {
+            f.fireCd = 0.26;
+            const hex = FACTIONS[f.attackerOwner]?.hex || '#14F195';
+            spawnLaserBeam(f.pos3D, target.pos3D, new THREE.Color(hex).getHex());
+          }
+          if (f.dogfightTime <= 0) {
+            handleCombatImpact(target, f.dmg, f.attackerOwner);
+            state.fleets.splice(i, 1);
+          }
+        }
+      }
+
+      for (let i = state.convoys.length - 1; i >= 0; i--) {
+        const c = state.convoys[i];
+        c.progress += dt * 0.25;
+        if (c.progress >= 1) {
+          state.gems += 45;
+          setTicker('💎 Supply Convoy arrived! +45 Aether Gems credited.');
+          state.convoys.splice(i, 1);
+        }
+      }
+
+      for (let i = gfx.laserLines.length - 1; i >= 0; i--) {
+        const l = gfx.laserLines[i];
+        l.life -= dt;
+        l.line.material.opacity = Math.max(0, l.life / 0.18);
+        if (l.life <= 0) {
+          gfx.scene.remove(l.line);
+          gfx.laserLines.splice(i, 1);
+        }
+      }
+
+      for (let i = gfx.explosionMeshes.length - 1; i >= 0; i--) {
+        const ex = gfx.explosionMeshes[i];
+        ex.life -= dt;
+        ex.mesh.scale.addScalar(dt * 9);
+        ex.mesh.material.opacity = Math.max(0, ex.life / 0.35);
+        if (ex.life <= 0) {
+          gfx.scene.remove(ex.mesh);
+          gfx.explosionMeshes.splice(i, 1);
+        }
+      }
+
+      if (!state.started) return;
+
+      if (state.energy < state.maxEnergy) state.energy = Math.min(state.maxEnergy, state.energy + dt * 0.95);
+      if (state.gmCooldown > 0) state.gmCooldown = Math.max(0, state.gmCooldown - dt);
+      if (!state.freeSpinReady) {
+        state.freeSpinTimer -= dt;
+        if (state.freeSpinTimer <= 0) {
+          state.freeSpinReady = true;
+          state.freeSpinTimer = 0;
+        }
+      }
+
+      if (state.flashEvent) {
+        state.flashTimer -= dt;
+        const timerEl = document.getElementById('flash-event-timer');
+        if (timerEl) timerEl.textContent = `${Math.max(0, Math.ceil(state.flashTimer))}s`;
+        if (state.flashTimer <= 0) {
+          state.flashEvent = null;
+          document.getElementById('flash-event-card').classList.add('hidden');
+        }
+      } else {
+        state.nextFlashIn -= dt;
+        if (state.nextFlashIn <= 0) {
+          state.nextFlashIn = 32;
+          triggerFlashEvent();
+        }
+      }
+
+      state.ecoTimer += dt;
+      if (state.ecoTimer >= 3.5) {
+        state.ecoTimer = 0;
+        const fData = FACTIONS[state.faction];
+        const ownedCount = Object.values(state.planets).filter(p => p.owner === state.faction).length;
+        state.gems += Math.round((15 + ownedCount * 12) * fData.yieldMult);
+        state.poolSol = +(state.poolSol + 0.04).toFixed(2);
+      }
+
+      state.aiTimer += dt;
+      if (state.aiTimer >= 7.0) {
+        state.aiTimer = 0;
+        const rivals = Object.keys(FACTIONS).filter(k => k !== state.faction);
+        const actor = rivals[Math.floor(Math.random() * rivals.length)];
+        const from = state.planets[actor];
+        const targets = Object.values(state.planets).filter(p => p.owner !== actor);
+        if (from && targets.length) {
+          const to = targets[Math.floor(Math.random() * targets.length)];
+          spawnSquadron(from, to, actor, 24, 'interceptor');
+        }
+      }
+    }
+
+    function render3DScene(elapsed, dt) {
+      if (!gfx.ready) return;
+      if (gfx.solarMat) gfx.solarMat.uniforms.uTime.value = elapsed;
+
+      Object.values(state.planets).forEach(pl => {
+        const entry = gfx.planetMeshes[pl.id];
+        if (!entry) return;
+        entry.group.position.set(pl.pos3D.x, 0, pl.pos3D.z);
+        entry.sphere.rotation.y += dt * 0.25;
+        entry.garrisonGrp.rotation.y += dt * 0.85;
+        if (entry.shieldDome.visible) entry.shieldDome.rotation.y -= dt * 0.35;
+        entry.selRing.visible = (pl.id === state.selectedPlanetId);
+      });
+
+      const activeFleetIds = new Set(state.fleets.map(f => f.uid));
+      for (const [uid, mesh] of gfx.fleetMeshes.entries()) {
+        if (!activeFleetIds.has(uid)) { gfx.scene.remove(mesh); gfx.fleetMeshes.delete(uid); }
+      }
+      state.fleets.forEach(f => {
+        let mesh = gfx.fleetMeshes.get(f.uid);
+        if (!mesh) {
+          const hex = FACTIONS[f.attackerOwner]?.hex || '#14F195';
+          mesh = buildMemeWarshipMesh(f.shipType, f.attackerOwner, new THREE.Color(hex).getHex());
+          gfx.scene.add(mesh);
+          gfx.fleetMeshes.set(f.uid, mesh);
+        }
+        mesh.position.set(f.pos3D.x, f.pos3D.y, f.pos3D.z);
+        const t = state.planets[f.targetId];
+        if (t) mesh.lookAt(t.pos3D.x, 0, t.pos3D.z);
+      });
+
+      const activeConvoyIds = new Set(state.convoys.map(c => c.uid));
+      for (const [uid, mesh] of gfx.convoyMeshes.entries()) {
+        if (!activeConvoyIds.has(uid)) { gfx.scene.remove(mesh); gfx.convoyMeshes.delete(uid); }
+      }
+      state.convoys.forEach(c => {
+        let mesh = gfx.convoyMeshes.get(c.uid);
+        if (!mesh) {
+          mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.75, 0), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+          gfx.scene.add(mesh);
+          gfx.convoyMeshes.set(c.uid, mesh);
+        }
+        const sA = state.planets[c.fromId], sB = state.planets[c.toId];
+        if (sA && sB) {
+          mesh.position.set(
+            sA.pos3D.x + (sB.pos3D.x - sA.pos3D.x) * c.progress,
+            Math.sin(c.progress * Math.PI) * 3.8,
+            sA.pos3D.z + (sB.pos3D.z - sA.pos3D.z) * c.progress
+          );
+          mesh.rotation.y += dt * 3.5;
+        }
+      });
+
+      let desiredTarget = new THREE.Vector3(0, 0, 0);
+      if (state.trackFleet && state.fleets.length > 0) {
+        const f0 = state.fleets[0];
+        desiredTarget.set(f0.pos3D.x, f0.pos3D.y, f0.pos3D.z);
+      } else if (state.focusPlanetId && state.planets[state.focusPlanetId]) {
+        const fp = state.planets[state.focusPlanetId];
+        desiredTarget.set(fp.pos3D.x, 0, fp.pos3D.z);
+      }
+      gfx.camTarget.lerp(desiredTarget, 0.1);
+
+      gfx.camera.position.set(
+        gfx.camTarget.x + gfx.sph.radius * Math.sin(gfx.sph.phi) * Math.sin(gfx.sph.theta),
+        gfx.camTarget.y + gfx.sph.radius * Math.cos(gfx.sph.phi),
+        gfx.camTarget.z + gfx.sph.radius * Math.sin(gfx.sph.phi) * Math.cos(gfx.sph.theta)
+      );
+      gfx.camera.lookAt(gfx.camTarget);
+
+      if (gfx.composer) {
+        gfx.composer.render();
+      } else {
+        gfx.renderer.render(gfx.scene, gfx.camera);
+      }
+      updateFloatingPlanetLabels();
+    }
+
+    // =========================================================================
+    // 5. UI DRAWERS, PORTRAITS, TEAMS & COMMS
+    // =========================================================================
+    function setTicker(msg) {
+      const el = document.getElementById('trench-ticker');
+      if (el) {
+        el.innerHTML = `<span>${msg} &nbsp;&nbsp;&nbsp;&nbsp;</span><span>${msg} &nbsp;&nbsp;&nbsp;&nbsp;</span>`;
+      }
+    }
+
+    function openDrawer(name) {
+      state.activeDrawer = name;
+      const drawer = document.getElementById('active-drawer');
+
+      document.querySelectorAll('.pill-nav-btn').forEach(btn => {
+        const isAct = btn.dataset.drawer === name;
+        if (btn.id === 'wallet-pill-btn') {
+          btn.className = isAct
+            ? 'pill-nav-btn px-2.5 py-1.5 rounded-xl bg-solPurple border-2 border-solGreen text-white text-[11px] font-mono font-extrabold shrink-0 transition'
+            : 'pill-nav-btn px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-solPurple to-indigo-600 border border-purple-400/40 text-white text-[11px] font-mono font-extrabold shrink-0 transition';
+        } else {
+          btn.className = isAct
+            ? 'pill-nav-btn px-2.5 py-1.5 rounded-xl bg-solGreen/20 border border-solGreen text-solGreen text-[11px] font-extrabold shrink-0 transition'
+            : 'pill-nav-btn px-2.5 py-1.5 rounded-xl glass-hud text-gray-200 text-[11px] font-bold shrink-0 transition';
+        }
+      });
+
+      if (name === 'map') {
+        drawer.classList.add('hidden');
+        return;
+      }
+
+      if (name === 'chat') document.getElementById('chat-ping-dot').classList.add('hidden');
+
+      drawer.classList.remove('hidden');
+      ['guide', 'spin', 'teams', 'heroes', 'fleet', 'chat', 'wallet'].forEach(key => {
+        document.getElementById(`drawer-body-${key}`).classList.toggle('hidden', key !== name);
+      });
+
+      const headers = {
+        guide:  ['DEGEN FIELD MANUAL', 'How to Play & Win SOL'],
+        spin:   ['DEGEN CASINO', 'Pump vs. Rug Trench Wheel'],
+        teams:  ['ALLIANCE SYNDICATES', 'Degen Teams & Coalitions'],
+        heroes: ['TRENCH HEROES', 'Meme Admirals & Commanders'],
+        fleet:  ['ORBITAL SHIPYARD', 'Meme Armada & Fortifications'],
+        chat:   ['DEGEN COMMS', 'Global Trenches & Team Chat'],
+        wallet: ['SOLANA TREASURY', '$DGALAXY Token Tiers & Jackpot']
+      };
+      document.getElementById('drawer-subtitle').textContent = headers[name][0];
+      document.getElementById('drawer-title').textContent = headers[name][1];
+
+      if (name === 'teams') renderTeamsList();
+      if (name === 'heroes') renderHeroesList();
+      if (name === 'chat') renderChat();
+      updateUI();
+    }
+
+    function closeDrawer() {
+      openDrawer('map');
+    }
+
+    function selectPlanet(id) {
+      if (!state.planets[id]) return;
+      state.selectedPlanetId = id;
+      updateUI();
+    }
+
+    function pushChat(chan, sender, tag, color, text) {
+      state.messages.push({ chan, sender, tag, color, text });
+      if (state.messages.length > 35) state.messages.shift();
+      if (state.activeDrawer === 'chat') {
+        renderChat();
+      } else {
+        document.getElementById('chat-ping-dot').classList.remove('hidden');
+      }
+    }
+
+    function renderChat() {
+      const feed = document.getElementById('chat-feed');
+      if (!feed) return;
+      const filtered = state.messages.filter(m => m.chan === state.chatChannel);
+      feed.innerHTML = filtered.map(m => `
+        <div class="leading-snug">
+          <span class="font-mono font-extrabold text-[10px]" style="color:${m.color}">[${m.tag}]</span>
+          <span class="font-bold text-gray-200">${m.sender}:</span>
+          <span class="text-gray-300">${m.text}</span>
+        </div>
+      `).join('');
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function renderTeamsList() {
+      const container = document.getElementById('teams-list-container');
+      if (!container) return;
+      container.innerHTML = Object.values(state.teams).map(t => {
+        const isMember = state.myTeamId === t.id;
+        return `
+          <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-extrabold" style="background:${t.color}25;color:${t.color}">[${t.tag}]</span>
+                <span class="text-xs font-extrabold text-white truncate">${t.name}</span>
+              </div>
+              <div class="text-[10px] font-mono text-gray-400">${t.members} Raiders • ${t.split}</div>
+            </div>
+            <button data-join-team="${t.id}" class="px-2.5 py-1 rounded-lg ${isMember ? 'bg-solGreen/20 text-solGreen border border-solGreen/50' : 'bg-white/10 hover:bg-white/20 text-white'} text-[10px] font-extrabold shrink-0">
+              ${isMember ? 'Joined ✓' : 'Join'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      container.querySelectorAll('[data-join-team]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tid = btn.dataset.joinTeam;
+          if (state.myTeamId === tid) return;
+          state.myTeamId = tid;
+          const t = state.teams[tid];
+          if (t) {
+            t.members += 1;
+            setTicker(`🛡️ Joined [${t.tag}] ${t.name}! Planetary rings synced.`);
+          }
+          rebuild3DPlanets();
+          renderTeamsList();
+          updateUI();
+        });
+      });
+    }
+
+    function renderHeroesList() {
+      const container = document.getElementById('heroes-list-container');
+      if (!container) return;
+      container.innerHTML = MEME_HEROES.map(h => {
+        const hired = state.hiredHeroes.includes(h.id);
+        return `
+          <div class="p-2 rounded-xl bg-slate-950/80 border ${hired ? 'border-solGreen/50' : 'border-white/10'} flex items-center justify-between gap-2.5">
+            <div class="w-11 h-11 rounded-xl overflow-hidden border border-white/20 shrink-0">${h.svg}</div>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-extrabold text-white truncate">${h.name}</div>
+              <div class="text-[10px] font-mono text-solGreen">${h.perk}</div>
+            </div>
+            <button data-hire-hero="${h.id}" class="px-2.5 py-1.5 rounded-xl ${hired ? 'bg-solGreen/20 text-solGreen border border-solGreen/40' : 'bg-degenGold text-slate-950'} text-[10px] font-extrabold shrink-0">
+              ${hired ? 'Active ✓' : `Hire 💎${h.cost}`}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      container.querySelectorAll('[data-hire-hero]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const hid = btn.dataset.hireHero;
+          if (state.hiredHeroes.includes(hid)) return;
+          const hero = MEME_HEROES.find(x => x.id === hid);
+          if (!hero) return;
+          if (state.gems < hero.cost) {
+            setTicker(`Need 💎${hero.cost} Aether Gems to hire ${hero.name}!`);
+            return;
+          }
+          state.gems -= hero.cost;
+          state.hiredHeroes.push(hid);
+          setTicker(`🐸 ${hero.name} joined your fleet! (${hero.perk})`);
+          renderHeroesList();
+          updateUI();
+        });
+      });
+    }
+
+    function checkVictory() {
+      if (state.victoryTriggered) return;
+      const all = Object.values(state.planets);
+      const owned = all.filter(p => p.owner === state.faction).length;
+      if (owned / all.length >= 0.75) {
+        state.victoryTriggered = true;
+        const payout = (state.poolSol * 0.5).toFixed(2);
+        document.getElementById('victory-sol-amount').textContent = `+${payout} SOL`;
+        document.getElementById('victory-modal').classList.remove('hidden');
+      }
+    }
+
+    function updateUI() {
+      const fData = FACTIONS[state.faction];
+      const home = state.planets[state.faction];
+      const target = state.planets[state.selectedPlanetId] || home;
+      const myTeam = getMyTeam();
+
+      document.getElementById('hud-commander-avatar').innerHTML = fData.svg;
+      document.getElementById('hud-commander-name').textContent = state.handle;
+      document.getElementById('hud-faction-ticker').textContent = fData.ticker;
+      document.getElementById('hud-faction-ticker').style.color = fData.hex;
+
+      document.getElementById('hud-energy').textContent = Math.floor(state.energy);
+      document.getElementById('hud-gems').textContent = Math.floor(state.gems);
+      document.getElementById('hud-score').textContent = state.warScore;
+      document.getElementById('hud-gm-mult').textContent = `${getGmMultiplier().toFixed(1)}x`;
+      document.getElementById('hud-pool').textContent = state.poolSol.toFixed(2);
+
+      // Spin cooldown & active buffs
+      const freeDot = document.getElementById('free-spin-dot');
+      const pullBtn = document.getElementById('pull-spin-btn');
+      if (freeDot) freeDot.classList.toggle('hidden', !state.freeSpinReady);
+      if (pullBtn) {
+        pullBtn.textContent = state.freeSpinReady
+          ? '🎰 PULL TRENCH LEVER (FREE SPIN READY!)'
+          : `🎰 PULL TRENCH LEVER (💎80 • Free in ${Math.ceil(state.freeSpinTimer)}s)`;
+      }
+      const buffs = [];
+      if (state.diamondShieldBuff) buffs.push('💎+25% Shield');
+      if (state.lamboSpeedBuff) buffs.push('🏎️+30% Speed');
+      if (state.freeRallyReady) buffs.push('🔥Free Rally');
+      const buffEl = document.getElementById('spin-buff-badges');
+      if (buffEl) buffEl.textContent = buffs.length ? buffs.join(' • ') : 'No Active Buffs';
+
+      // Target Card
+      if (target) {
+        const tFaction = FACTIONS[target.owner] || fData;
+        const tTeam = getTeamForOwner(target.owner);
+        document.getElementById('target-faction-svg').innerHTML = tFaction.svg;
+        document.getElementById('target-planet-name').textContent = target.name;
+        const badge = document.getElementById('target-owner-badge');
+        badge.textContent = tTeam ? `[${tTeam.tag}]` : (target.owner === 'neutral' ? 'NEUTRAL' : tFaction.ticker);
+        badge.style.color = tTeam ? tTeam.color : (target.owner === 'neutral' ? '#CBD5E1' : tFaction.hex);
+        badge.style.backgroundColor = `${badge.style.color}22`;
+
+        document.getElementById('target-lv-badge').textContent = getFortTierLabel(target.level);
+        const pct = Math.max(0, Math.min(100, (target.hp / target.maxHp) * 100));
+        document.getElementById('target-hp-fill').style.width = `${pct}%`;
+        document.getElementById('target-hp-text').textContent = `${Math.ceil(target.hp)}/${target.maxHp}`;
+      }
+
+      document.getElementById('raid-cost-label').textContent = state.freeRallyReady ? 'FREE' : getRaidEnergyCost();
+
+      // Team banner
+      if (myTeam) {
+        document.getElementById('my-team-tag').textContent = `[${myTeam.tag}]`;
+        document.getElementById('my-team-tag').style.color = myTeam.color;
+        document.getElementById('my-team-name').textContent = myTeam.name;
+        document.getElementById('my-team-split').textContent = `${myTeam.split} • ${myTeam.members} Raiders`;
+      }
+
+      // Hero drawer supreme commander
+      document.getElementById('hero-drawer-commander-svg').innerHTML = fData.svg;
+      document.getElementById('hero-drawer-commander-name').textContent = fData.commander;
+      document.getElementById('hero-drawer-commander-perk').textContent = fData.perkLabel;
+
+      // Shipyard defense button
+      if (home) {
+        const nextLv = home.level + 1;
+        const upCost = Math.round(110 * Math.pow(1.35, home.level - 1));
+        document.getElementById('next-fort-name').textContent = FORT_TIERS[nextLv] || `Lv.${nextLv} Anti-Jeet Grid ⚡`;
+        document.getElementById('shield-up-cost').textContent = upCost;
+      }
+
+      // Wallet drawer
+      document.getElementById('wallet-pool-display').textContent = `${state.poolSol.toFixed(2)} SOL`;
+      document.getElementById('wallet-est-payout').textContent = `${(state.poolSol * 0.25).toFixed(2)} SOL`;
+      const connLabel = document.getElementById('wallet-conn-label');
+      const statusDot = document.getElementById('wallet-status-dot');
+      const balLabel = document.getElementById('wallet-sol-bal');
+      const connectBtn = document.getElementById('connect-phantom-btn');
+      const walletPill = document.getElementById('wallet-pill-btn');
+      if (state.walletPubkey && connLabel) {
+        const shortAddr = `${state.walletPubkey.slice(0, 4)}...${state.walletPubkey.slice(-4)}`;
+        connLabel.textContent = `${shortAddr} (${DEPLOY_CONFIG.NETWORK.toUpperCase()})`;
+        statusDot.className = 'w-2 h-2 rounded-full bg-solGreen';
+        balLabel.textContent = `Balance: ${state.walletSolBalance.toFixed(3)} SOL • ${state.rankedPassActive ? 'Ranked Pass ACTIVE ✓' : 'Unranked Cadet'}`;
+        connectBtn.textContent = 'Connected ✓';
+        if (walletPill) walletPill.textContent = `👻 ${shortAddr}`;
+      }
+    }
+
+    // =========================================================================
+    // 5B. LIVE SOLANA WALLET ADAPTER & 80/20 ATOMIC SOL DEPOSIT
+    // =========================================================================
+    async function connectSolanaWallet() {
+      const provider = window.phantom?.solana || window.solana;
+      if (!provider) {
+        setTicker('👻 Phantom/Solflare not detected! Open in Phantom browser or install extension.');
+        return;
+      }
+      try {
+        const resp = await provider.connect();
+        state.walletPubkey = resp.publicKey.toString();
+        state.handle = `${state.walletPubkey.slice(0, 4)}...${state.walletPubkey.slice(-4)}`;
+
+        if (window.solanaWeb3) {
+          const conn = new solanaWeb3.Connection(DEPLOY_CONFIG.RPC_URL, 'confirmed');
+          const lamports = await conn.getBalance(resp.publicKey);
+          state.walletSolBalance = lamports / 1e9;
+
+          // If $DGALAXY mint is configured later, auto-check SPL balance for free Commander/Admiral entry
+          if (DEPLOY_CONFIG.TOKEN_MINT) {
+            const accts = await conn.getParsedTokenAccountsByOwner(resp.publicKey, {
+              mint: new solanaWeb3.PublicKey(DEPLOY_CONFIG.TOKEN_MINT)
+            });
+            const tokBal = accts.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount || 0), 0);
+            if (tokBal >= 250000) { state.tokenTier = 'admiral'; state.rankedPassActive = true; }
+            else if (tokBal >= 50000) { state.tokenTier = 'commander'; state.rankedPassActive = true; }
+          }
+        }
+
+        // Optional live multiplayer Socket.io handshake if SERVER_URL is set
+        if (DEPLOY_CONFIG.SERVER_URL && window.io && !state.socket) {
+          const msg = `Sign in to DEGEN GALAXY Epoch #${state.epoch} (${Date.now()})`;
+          const encoded = new TextEncoder().encode(msg);
+          const signed = await provider.signMessage(encoded, 'utf8');
+          state.socket = io(DEPLOY_CONFIG.SERVER_URL);
+          state.socket.emit('auth_commander', {
+            wallet: state.walletPubkey,
+            message: msg,
+            signature: btoa(String.fromCharCode(...signed.signature)),
+            name: state.handle,
+            species: state.faction
+          });
+        }
+
+        setTicker(`👻 Wallet ${state.handle} connected on Solana ${DEPLOY_CONFIG.NETWORK}!`);
+        updateUI();
+      } catch (err) {
+        setTicker(`Wallet connection cancelled: ${err.message || 'User rejected'}`);
+      }
+    }
+
+    async function sendSplitSolDeposit(solAmount, purposeLabel) {
+      const provider = window.phantom?.solana || window.solana;
+      if (!provider || !state.walletPubkey || !window.solanaWeb3) {
+        // Fallback simulation if testing without a browser wallet extension
+        state.poolSol = +(state.poolSol + solAmount * 0.8).toFixed(2);
+        state.rankedPassActive = true;
+        state.gems += 250;
+        state.energy = state.maxEnergy;
+        updateUI();
+        setTicker(`⚡ [Demo] ${purposeLabel}: +${(solAmount * 0.8).toFixed(2)} SOL added to Jackpot!`);
+        return;
+      }
+
+      try {
+        const conn = new solanaWeb3.Connection(DEPLOY_CONFIG.RPC_URL, 'confirmed');
+        const fromPubkey = new solanaWeb3.PublicKey(state.walletPubkey);
+        const vaultPubkey = new solanaWeb3.PublicKey(DEPLOY_CONFIG.EPOCH_VAULT_WALLET);
+        const treasuryPubkey = new solanaWeb3.PublicKey(DEPLOY_CONFIG.TREASURY_WALLET);
+
+        const totalLamports = Math.round(solAmount * 1e9);
+        const vaultLamports = Math.floor(totalLamports * 0.8);
+        const treasuryLamports = totalLamports - vaultLamports;
+
+        const tx = new solanaWeb3.Transaction().add(
+          solanaWeb3.SystemProgram.transfer({ fromPubkey, toPubkey: vaultPubkey, lamports: vaultLamports }),
+          solanaWeb3.SystemProgram.transfer({ fromPubkey, toPubkey: treasuryPubkey, lamports: treasuryLamports })
+        );
+        tx.feePayer = fromPubkey;
+        const { blockhash } = await conn.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+
+        const { signature } = await provider.signAndSendTransaction(tx);
+        await conn.confirmTransaction(signature, 'confirmed');
+
+        state.poolSol = +(state.poolSol + solAmount * 0.8).toFixed(2);
+        state.rankedPassActive = true;
+        state.gems += 250;
+        state.energy = state.maxEnergy;
+        const newBal = await conn.getBalance(fromPubkey);
+        state.walletSolBalance = newBal / 1e9;
+        updateUI();
+        setTicker(`✅ ${purposeLabel} confirmed on-chain! +${(solAmount * 0.8).toFixed(2)} SOL sent to Jackpot.`);
+      } catch (err) {
+        setTicker(`Transaction failed: ${err.message || 'Cancelled'}`);
+      }
+    }
+
+    // =========================================================================
+    // 6. EVENT LISTENERS & MAIN LOOP
+    // =========================================================================
+    function bindEvents() {
+      // Faction selection modal previews
+      Object.keys(FACTIONS).forEach(k => {
+        const mini = document.getElementById(`mini-svg-${k}`);
+        if (mini) mini.innerHTML = FACTIONS[k].svg;
+      });
+
+      const refreshModalPreview = () => {
+        const f = FACTIONS[state.faction];
+        document.getElementById('modal-preview-svg').innerHTML = f.svg;
+        document.getElementById('modal-commander-title').textContent = f.commander;
+        document.getElementById('modal-commander-title').style.color = f.hex;
+        document.getElementById('modal-commander-desc').textContent = f.desc;
+
+        document.querySelectorAll('.faction-pick-btn').forEach(btn => {
+          const active = btn.dataset.faction === state.faction;
+          const bf = FACTIONS[btn.dataset.faction];
+          btn.style.borderColor = active ? bf.hex : 'rgba(255,255,255,0.15)';
+          btn.style.backgroundColor = active ? `${bf.hex}24` : 'rgba(255,255,255,0.05)';
+        });
+      };
+      refreshModalPreview();
+
+      document.querySelectorAll('.faction-pick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.faction = btn.dataset.faction;
+          state.swatchColor = FACTIONS[state.faction].hex;
+          refreshModalPreview();
+        });
+      });
+
+      document.getElementById('enter-galaxy-btn').addEventListener('click', () => {
+        const h = document.getElementById('modal-handle-input').value.trim();
+        if (h) state.handle = h;
+        state.myTeamId = `team_${state.faction}`;
+        if (!state.teams[state.myTeamId]) state.myTeamId = 'team_wif';
+        state.started = true;
+        document.getElementById('faction-modal').classList.add('hidden');
+        initGalaxy();
+        renderChat();
+      });
+
+      document.getElementById('modal-how-to-btn').addEventListener('click', () => {
+        document.getElementById('enter-galaxy-btn').click();
+        openDrawer('guide');
+      });
+
+      document.getElementById('next-epoch-btn').addEventListener('click', () => {
+        state.epoch += 1;
+        state.poolSol = 55.0;
+        document.getElementById('victory-modal').classList.add('hidden');
+        initGalaxy();
+        setTicker(`🚀 Epoch #${state.epoch} launched! Pump.fun fees funding the new SOL Jackpot!`);
+      });
+
+      // Top HUD & Navigation Pills
+      document.getElementById('header-avatar-btn').addEventListener('click', () => openDrawer('heroes'));
+      document.getElementById('pool-badge-btn').addEventListener('click', () => openDrawer('wallet'));
+      document.getElementById('top-gm-btn').addEventListener('click', triggerGmStreak);
+      document.getElementById('chat-gm-btn').addEventListener('click', triggerGmStreak);
+      document.getElementById('pull-spin-btn').addEventListener('click', triggerTrenchSpin);
+
+      document.getElementById('flash-choice-a').addEventListener('click', () => resolveFlashChoice('a'));
+      document.getElementById('flash-choice-b').addEventListener('click', () => resolveFlashChoice('b'));
+
+      document.querySelectorAll('.pill-nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => openDrawer(btn.dataset.drawer));
+      });
+      document.getElementById('close-drawer-btn').addEventListener('click', closeDrawer);
+
+      document.getElementById('hide-hud-btn').addEventListener('click', () => {
+        state.hudHidden = true;
+        document.getElementById('hud-root').classList.add('hidden');
+        document.getElementById('planet-labels-layer').innerHTML = '';
+        document.getElementById('restore-hud-btn').classList.remove('hidden');
+      });
+      document.getElementById('restore-hud-btn').addEventListener('click', () => {
+        state.hudHidden = false;
+        document.getElementById('hud-root').classList.remove('hidden');
+        document.getElementById('restore-hud-btn').classList.add('hidden');
+      });
+
+      document.getElementById('track-fleet-btn').addEventListener('click', () => {
+        state.trackFleet = !state.trackFleet;
+        const btn = document.getElementById('track-fleet-btn');
+        btn.classList.toggle('border-popCyan', state.trackFleet);
+        btn.classList.toggle('bg-popCyan/20', state.trackFleet);
+        setTicker(state.trackFleet ? '🎥 Camera locked onto active meme squadron!' : '🎥 Free orbital camera restored.');
+      });
+
+      // Bottom Target Card Actions
+      document.getElementById('btn-focus').addEventListener('click', () => {
+        state.trackFleet = false;
+        state.focusPlanetId = state.focusPlanetId === state.selectedPlanetId ? null : state.selectedPlanetId;
+        gfx.sph.radius = state.focusPlanetId ? 34 : 92;
+      });
+      document.getElementById('btn-raid').addEventListener('click', () => executeRaid(false));
+      document.getElementById('btn-rally').addEventListener('click', () => executeRaid(true));
+
+      // Teams Drawer
+      document.querySelectorAll('.swatch-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.swatchColor = btn.dataset.hex;
+          document.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('ring-2', 'ring-white'));
+          btn.classList.add('ring-2', 'ring-white');
+        });
+      });
+
+      document.getElementById('create-team-btn').addEventListener('click', () => {
+        const name = document.getElementById('team-name-input').value.trim() || 'Alpha Trenches';
+        const tag = (document.getElementById('team-tag-input').value.trim() || 'CHAD').toUpperCase().slice(0, 4);
+        const split = document.getElementById('team-split-select').value;
+        const id = `team_custom_${Date.now()}`;
+        state.teams[id] = { id, tag, name, color: state.swatchColor, split, members: 1 };
+        state.myTeamId = id;
+        rebuild3DPlanets();
+        renderTeamsList();
+        updateUI();
+        setTicker(`🛡️ Founded [${tag}] ${name}! Planetary rings & beacons updated.`);
+      });
+
+      document.getElementById('leave-team-btn').addEventListener('click', () => {
+        state.myTeamId = null;
+        rebuild3DPlanets();
+        renderTeamsList();
+        updateUI();
+        setTicker('Left current alliance team.');
+      });
+
+      document.getElementById('drawer-convoy-btn').addEventListener('click', () => {
+        spawnSupplyConvoy();
+        closeDrawer();
+      });
+      document.getElementById('drawer-rally-btn').addEventListener('click', () => executeRaid(true));
+
+      // Shipyard Drawer
+      document.querySelectorAll('.ship-tier-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.selectedShip = btn.dataset.ship;
+          document.querySelectorAll('.ship-tier-btn').forEach(b => {
+            const act = b.dataset.ship === state.selectedShip;
+            b.className = act
+              ? 'ship-tier-btn p-2 rounded-xl bg-solGreen/15 border border-solGreen text-left'
+              : 'ship-tier-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left';
+          });
+          updateUI();
+        });
+      });
+
+      document.getElementById('build-garrison-btn').addEventListener('click', () => {
+        const home = state.planets[state.faction];
+        if (!home) return;
+        if (state.gems < 65) {
+          setTicker('Need 💎65 Aether Gems to deploy an Orbit Guard Ship!');
+          return;
+        }
+        state.gems -= 65;
+        home.garrison = Math.min(8, home.garrison + 1);
+        rebuild3DPlanets();
+        updateUI();
+        setTicker(`🚀 Orbit Guard Ship deployed around ${home.name}!`);
+      });
+
+      document.getElementById('claim-gem-crate-btn').addEventListener('click', () => {
+        state.gems += 150;
+        state.energy = Math.min(state.maxEnergy, state.energy + 4);
+        updateUI();
+        setTicker('🎁 Claimed 100x Gem Crate (+150💎 & +4⚡ Warp Energy)!');
+      });
+
+      document.getElementById('btn-shield-up').addEventListener('click', upgradeHomeShield);
+
+      // Chat Drawer
+      document.querySelectorAll('.chat-chan-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.chatChannel = btn.dataset.channel;
+          document.querySelectorAll('.chat-chan-btn').forEach(b => {
+            const act = b.dataset.channel === state.chatChannel;
+            b.className = act
+              ? 'chat-chan-btn px-2 py-0.5 rounded bg-solGreen/20 border border-solGreen/50 text-solGreen text-[10px] font-mono font-extrabold'
+              : 'chat-chan-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 text-[10px] font-mono font-bold';
+          });
+          renderChat();
+        });
+      });
+
+      document.querySelectorAll('.quick-chat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const t = getMyTeam();
+          pushChat(state.chatChannel, state.handle, t?.tag || 'SOL', t?.color || '#14F195', btn.dataset.quick);
+        });
+      });
+
+      document.getElementById('chat-send-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const inp = document.getElementById('chat-text-input');
+        const txt = inp.value.trim();
+        if (!txt) return;
+        inp.value = '';
+        if (txt.toLowerCase() === 'gm') {
+          triggerGmStreak();
+          return;
+        }
+        const t = getMyTeam();
+        pushChat(state.chatChannel, state.handle, t?.tag || 'SOL', t?.color || '#14F195', txt);
+      });
+
+      // Wallet Drawer
+      document.querySelectorAll('.tier-select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.tokenTier = btn.dataset.tier;
+          document.querySelectorAll('.tier-select-btn').forEach(b => {
+            const act = b.dataset.tier === state.tokenTier;
+            b.className = act
+              ? 'tier-select-btn p-2 rounded-xl bg-solGreen/15 border border-solGreen text-left'
+              : 'tier-select-btn p-2 rounded-xl bg-white/5 border border-white/15 text-left';
+          });
+          updateUI();
+        });
+      });
+
+      document.getElementById('boost-pool-btn').addEventListener('click', () => {
+        sendSplitSolDeposit(0.10, 'Overdrive Crate');
+      });
+      document.getElementById('buy-epoch-pass-btn').addEventListener('click', () => {
+        sendSplitSolDeposit(0.10, 'Epoch #1 Ranked SOL Pass');
+      });
+      document.getElementById('connect-phantom-btn').addEventListener('click', connectSolanaWallet);
+
+      window.addEventListener('resize', () => {
+        if (!gfx.ready) return;
+        gfx.camera.aspect = window.innerWidth / window.innerHeight;
+        gfx.camera.updateProjectionMatrix();
+        gfx.renderer.setSize(window.innerWidth, window.innerHeight);
+        if (gfx.composer) gfx.composer.setSize(window.innerWidth, window.innerHeight);
+      });
+    }
+
+    window.addEventListener('load', () => {
+      init3DScene();
+      initGalaxy();
+      bindEvents();
+
+      let lastTime = performance.now();
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+        stepSimulation(dt);
+        render3DScene(now * 0.001, dt);
+      }
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
