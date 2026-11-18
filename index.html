@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>DEGEN GALAXY ($DGALAXY) — 3D Solana Meme Strategy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -141,11 +142,14 @@
           <div class="px-1.5 py-1 rounded-lg bg-purple-500/15 border border-purple-400/35 text-[10px] sm:text-[11px] font-mono font-extrabold text-purple-300 shrink-0">
             ⚔️<span id="hud-score">450</span>
           </div>
+          <div id="hud-online-pill" class="px-1.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-[10px] sm:text-[11px] font-mono font-extrabold text-solGreen shrink-0" title="Live Multiplayer Status">
+            🟢<span id="hud-online-count">1</span>
+          </div>
           <button id="top-gm-btn" class="px-1.5 py-1 rounded-lg bg-yellow-400/20 border border-yellow-300/50 text-[10px] sm:text-[11px] font-mono font-extrabold text-degenGold shrink-0 active:scale-95 transition" title="Say GM for Streak Multiplier">
             ☀️GM <span id="hud-gm-mult">1.0x</span>
           </button>
           <button id="pool-badge-btn" class="px-2 py-1 rounded-lg bg-solGreen/15 border border-solGreen/55 text-[10px] sm:text-[11px] font-mono font-extrabold text-solGreen shrink-0 pool-glow">
-            🏆 <span id="hud-pool">48.50</span> SOL
+            🏆 <span id="hud-pool">0.00</span> SOL
           </button>
         </div>
 
@@ -463,12 +467,12 @@
           <div class="grid grid-cols-2 gap-2 text-center font-mono">
             <div class="p-2 rounded-xl bg-slate-950/90 border border-white/10">
               <div class="text-[9px] text-gray-400">EPOCH #1 SOL JACKPOT</div>
-              <div id="wallet-pool-display" class="text-sm font-extrabold text-solGreen mt-0.5">48.50 SOL</div>
-              <div class="text-[9px] text-gray-400">80% Passes + Creator Fees</div>
+              <div id="wallet-pool-display" class="text-sm font-extrabold text-solGreen mt-0.5">0.00 SOL</div>
+              <div class="text-[9px] text-gray-400">Live On-Chain Vault Balance</div>
             </div>
             <div class="p-2 rounded-xl bg-slate-950/90 border border-white/10">
               <div class="text-[9px] text-gray-400">EST. MERKLE CLAIM</div>
-              <div id="wallet-est-payout" class="text-sm font-extrabold text-degenGold mt-0.5">12.13 SOL</div>
+              <div id="wallet-est-payout" class="text-sm font-extrabold text-degenGold mt-0.5">0.00 SOL</div>
               <div class="text-[9px] text-gray-400">Rewards Program Vault</div>
             </div>
           </div>
@@ -606,11 +610,11 @@
     // =========================================================================
     const DEPLOY_CONFIG = {
       NETWORK: 'mainnet-beta',
-      RPC_URL: 'https://mainnet.helius-rpc.com/?api-key=117a6c32-b1ee-47ef-9c57-70f92d2f7d09', // Tip: Swap with your free Helius Mainnet RPC URL for high traffic
+      RPC_URL: 'https://mainnet.helius-rpc.com/?api-key=YOUR_HELIUS_KEY', // Paste your free Helius Mainnet RPC URL here
       EPOCH_VAULT_WALLET: '4czHCesTdy5PnkfE4jue7GC1981FQS4XJUtsfVAiK9ug', // Wallet 1: Receives 80% of SOL passes + Pump.fun creator fees
       TREASURY_WALLET: '8qUfkJ5TsiLM8xY2mDgYEBExYzrigNw8wEjJG91wPH4b',    // Wallet 2: Receives 20% studio fee
       TOKEN_MINT: '', // Leave empty now! Paste $DGALAXY mint address after Pump.fun launch
-      SERVER_URL: 'degengalaxy-production.up.railway.app'  // Optional: Paste Railway/Render Socket.io URL (e.g. 'https://degen-galaxy.up.railway.app')
+      SERVER_URL: ''  // Paste your Railway URL here (e.g. 'https://degengalaxy-production.up.railway.app')
     };
 
     // =========================================================================
@@ -1121,7 +1125,7 @@
       maxEnergy: 15,
       gems: 340,
       warScore: 450,
-      poolSol: 48.50,
+      poolSol: 0.00,
       epoch: 1,
       hiredHeroes: [],
 
@@ -1810,7 +1814,19 @@
       const tierAtk = state.tokenTier === 'admiral' ? 1.15 : (state.tokenTier === 'commander' ? 1.05 : 1.0);
       const dmg = Math.round((spec.dmg + home.level * 12) * fData.atkMult * heroAtk * tierAtk);
 
-      spawnSquadron(home, target, state.faction, dmg, spec.id);
+      if (state.socket && state.socket.connected) {
+        state.socket.emit('launch_raid', {
+          fromId: home.id,
+          targetId: target.id,
+          attackerOwner: state.faction,
+          shipType: spec.id,
+          dmg,
+          isRally,
+          sender: state.handle
+        });
+      } else {
+        spawnSquadron(home, target, state.faction, dmg, spec.id);
+      }
 
       let alliesLaunched = 0;
       const myTeam = getMyTeam();
@@ -1848,6 +1864,9 @@
       home.maxHp = Math.round((home.maxHp + 35) * (heroShield > 1 ? 1.08 : 1.0));
       home.hp = home.maxHp;
       home.garrison = Math.min(8, home.garrison + 1);
+      if (state.socket && state.socket.connected) {
+        state.socket.emit('upgrade_planet', { planetId: home.id });
+      }
       rebuild3DPlanets();
       setTicker(`🛡️ ${home.name} upgraded to Lv.${home.level} (Hex Shield Dome Active)!`);
       updateUI();
@@ -2026,7 +2045,7 @@
         const fData = FACTIONS[state.faction];
         const ownedCount = Object.values(state.planets).filter(p => p.owner === state.faction).length;
         state.gems += Math.round((15 + ownedCount * 12) * fData.yieldMult);
-        state.poolSol = +(state.poolSol + 0.04).toFixed(2);
+        syncOnChainJackpotBalance();
       }
 
       state.aiTimer += dt;
@@ -2153,28 +2172,32 @@
         return;
       }
 
-      if (name === 'chat') document.getElementById('chat-ping-dot').classList.add('hidden');
-
       drawer.classList.remove('hidden');
-      ['guide', 'spin', 'teams', 'heroes', 'fleet', 'chat', 'wallet'].forEach(key => {
-        document.getElementById(`drawer-body-${key}`).classList.toggle('hidden', key !== name);
+      const bodies = ['guide', 'spin', 'teams', 'heroes', 'fleet', 'chat', 'wallet'];
+      bodies.forEach(b => {
+        const el = document.getElementById(`drawer-body-${b}`);
+        if (el) el.classList.toggle('hidden', b !== name);
       });
 
-      const headers = {
-        guide:  ['DEGEN FIELD MANUAL', 'How to Play & Win SOL'],
-        spin:   ['DEGEN CASINO', 'Pump vs. Rug Trench Wheel'],
-        teams:  ['ALLIANCE SYNDICATES', 'Degen Teams & Coalitions'],
-        heroes: ['TRENCH HEROES', 'Meme Admirals & Commanders'],
-        fleet:  ['ORBITAL SHIPYARD', 'Meme Armada & Fortifications'],
-        chat:   ['DEGEN COMMS', 'Global Trenches & Team Chat'],
-        wallet: ['SOLANA TREASURY', '$DGALAXY Token Tiers & Jackpot']
+      const meta = {
+        guide:  { sub: 'HOW TO PLAY & TOKENOMICS', title: 'Degen Field Manual ($DGALAXY)' },
+        spin:   { sub: 'PUMP VS. RUG TRENCH WHEEL', title: 'Degen Leverage Spin' },
+        teams:  { sub: 'ALLIANCE SYNDICATES', title: 'Degen Teams & Coalitions' },
+        heroes: { sub: 'RECRUITABLE MEME ADMIRALS', title: 'Trench Heroes' },
+        fleet:  { sub: 'ORBITAL SHIPYARD & SHIELDS', title: 'Fleet Armada' },
+        chat:   { sub: 'LIVE SOCKET.IO COMMS', title: 'Global & Team Trench Chat' },
+        wallet: { sub: 'SOLANA MAINNET & EPOCH #1', title: 'Phantom Wallet & SOL Jackpot' }
       };
-      document.getElementById('drawer-subtitle').textContent = headers[name][0];
-      document.getElementById('drawer-title').textContent = headers[name][1];
+      const m = meta[name] || meta.teams;
+      document.getElementById('drawer-subtitle').textContent = m.sub;
+      document.getElementById('drawer-title').textContent = m.title;
 
       if (name === 'teams') renderTeamsList();
       if (name === 'heroes') renderHeroesList();
-      if (name === 'chat') renderChat();
+      if (name === 'chat') {
+        document.getElementById('chat-ping-dot').classList.add('hidden');
+        renderChat();
+      }
       updateUI();
     }
 
@@ -2182,31 +2205,21 @@
       openDrawer('map');
     }
 
-    function selectPlanet(id) {
-      if (!state.planets[id]) return;
-      state.selectedPlanetId = id;
+    function selectPlanet(planetId) {
+      if (!state.planets[planetId]) return;
+      state.selectedPlanetId = planetId;
       updateUI();
-    }
-
-    function pushChat(chan, sender, tag, color, text) {
-      state.messages.push({ chan, sender, tag, color, text });
-      if (state.messages.length > 35) state.messages.shift();
-      if (state.activeDrawer === 'chat') {
-        renderChat();
-      } else {
-        document.getElementById('chat-ping-dot').classList.remove('hidden');
-      }
     }
 
     function renderChat() {
       const feed = document.getElementById('chat-feed');
       if (!feed) return;
-      const filtered = state.messages.filter(m => m.chan === state.chatChannel);
+      const filtered = state.messages.filter(m => m.chan === state.chatChannel || m.chan === 'global');
       feed.innerHTML = filtered.map(m => `
         <div class="leading-snug">
-          <span class="font-mono font-extrabold text-[10px]" style="color:${m.color}">[${m.tag}]</span>
-          <span class="font-bold text-gray-200">${m.sender}:</span>
-          <span class="text-gray-300">${m.text}</span>
+          <span class="px-1 py-0.2 rounded text-[9px] font-mono font-extrabold" style="color:${m.color};background:${m.color}22">[${m.tag}]</span>
+          <span class="font-bold text-white">${m.sender}:</span>
+          <span class="text-gray-200">${m.text}</span>
         </div>
       `).join('');
       feed.scrollTop = feed.scrollHeight;
@@ -2216,18 +2229,18 @@
       const container = document.getElementById('teams-list-container');
       if (!container) return;
       container.innerHTML = Object.values(state.teams).map(t => {
-        const isMember = state.myTeamId === t.id;
+        const joined = state.myTeamId === t.id;
         return `
-          <div class="p-2 rounded-xl bg-slate-950/80 border border-white/10 flex items-center justify-between gap-2">
+          <div class="p-2 rounded-xl bg-slate-950/80 border ${joined ? 'border-solGreen/60' : 'border-white/10'} flex items-center justify-between gap-2">
             <div class="min-w-0">
               <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-extrabold" style="background:${t.color}25;color:${t.color}">[${t.tag}]</span>
+                <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-extrabold" style="color:${t.color};background:${t.color}22">[${t.tag}]</span>
                 <span class="text-xs font-extrabold text-white truncate">${t.name}</span>
               </div>
-              <div class="text-[10px] font-mono text-gray-400">${t.members} Raiders • ${t.split}</div>
+              <div class="text-[10px] font-mono text-gray-400">${t.split} • ${t.members} Members</div>
             </div>
-            <button data-join-team="${t.id}" class="px-2.5 py-1 rounded-lg ${isMember ? 'bg-solGreen/20 text-solGreen border border-solGreen/50' : 'bg-white/10 hover:bg-white/20 text-white'} text-[10px] font-extrabold shrink-0">
-              ${isMember ? 'Joined ✓' : 'Join'}
+            <button data-join-team="${t.id}" class="px-2.5 py-1 rounded-xl ${joined ? 'bg-solGreen/20 text-solGreen border border-solGreen/40' : 'bg-white/10 hover:bg-white/20 text-white'} text-[10px] font-extrabold shrink-0">
+              ${joined ? 'Joined ✓' : 'Join'}
             </button>
           </div>
         `;
@@ -2235,18 +2248,111 @@
 
       container.querySelectorAll('[data-join-team]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const tid = btn.dataset.joinTeam;
-          if (state.myTeamId === tid) return;
-          state.myTeamId = tid;
-          const t = state.teams[tid];
-          if (t) {
-            t.members += 1;
-            setTicker(`🛡️ Joined [${t.tag}] ${t.name}! Planetary rings synced.`);
-          }
+          state.myTeamId = btn.dataset.joinTeam;
           rebuild3DPlanets();
           renderTeamsList();
           updateUI();
         });
+      });
+    }
+
+    function pushChat(chan, sender, tag, color, text, fromRemote = false) {
+      if (!fromRemote && state.socket && state.socket.connected) {
+        state.socket.emit('send_chat', { chan, sender, tag, color, text });
+        return;
+      }
+      state.messages.push({ chan, sender, tag, color, text });
+      if (state.messages.length > 35) state.messages.shift();
+      if (state.activeDrawer === 'chat') {
+        renderChat();
+      } else {
+        document.getElementById('chat-ping-dot').classList.remove('hidden');
+      }
+    }
+
+    function initMultiplayerSocket() {
+      if (!DEPLOY_CONFIG.SERVER_URL || !window.io || state.socket) return;
+      state.socket = io(DEPLOY_CONFIG.SERVER_URL, { transports: ['websocket', 'polling'] });
+
+      state.socket.on('connect', () => {
+        state.socket.emit('join_commander', {
+          name: state.handle,
+          faction: state.faction,
+          wallet: state.walletPubkey
+        });
+        setTicker('🌐 Connected to Live Multiplayer Galaxy & Global Chat!');
+      });
+
+      state.socket.on('init_state', (snap) => {
+        if (typeof snap.poolSol === 'number') state.poolSol = snap.poolSol;
+        if (snap.planets) {
+          Object.entries(snap.planets).forEach(([id, srvPl]) => {
+            if (state.planets[id]) {
+              Object.assign(state.planets[id], srvPl);
+            }
+          });
+          rebuild3DPlanets();
+        }
+        if (Array.isArray(snap.messages)) {
+          state.messages = snap.messages;
+          renderChat();
+        }
+        const oc = document.getElementById('hud-online-count');
+        if (oc && snap.onlineCount) oc.textContent = snap.onlineCount;
+        updateUI();
+      });
+
+      state.socket.on('online_count', (count) => {
+        const oc = document.getElementById('hud-online-count');
+        if (oc) oc.textContent = count;
+      });
+
+      state.socket.on('chat_message', (msg) => {
+        pushChat(msg.chan, msg.sender, msg.tag, msg.color, msg.text, true);
+      });
+
+      state.socket.on('remote_raid_launched', (ev) => {
+        const fromPl = state.planets[ev.fromId] || state.planets[ev.attackerOwner];
+        const toPl = state.planets[ev.targetId];
+        if (fromPl && toPl) {
+          spawnSquadron(fromPl, toPl, ev.attackerOwner, ev.dmg, ev.shipType);
+          if (ev.isRally) {
+            setTicker(`📣 LIVE RALLY: ${ev.sender} launched a squadron at ${toPl.name}!`);
+          }
+        }
+      });
+
+      state.socket.on('planet_updated', ({ planet, capturedBy, attackerName }) => {
+        if (planet && state.planets[planet.id]) {
+          Object.assign(state.planets[planet.id], planet);
+          if (capturedBy) {
+            rebuild3DPlanets();
+            setTicker(`🏆 ${attackerName || 'A rival'} captured ${planet.name} in real time!`);
+            checkVictory();
+          }
+          updateUI();
+        }
+      });
+
+      state.socket.on('galaxy_sync', ({ planets, poolSol, onlineCount }) => {
+        if (typeof poolSol === 'number') state.poolSol = poolSol;
+        const oc = document.getElementById('hud-online-count');
+        if (oc && onlineCount) oc.textContent = onlineCount;
+        if (planets) {
+          Object.entries(planets).forEach(([id, srvPl]) => {
+            if (state.planets[id]) {
+              state.planets[id].hp = srvPl.hp;
+              state.planets[id].maxHp = srvPl.maxHp;
+              state.planets[id].level = srvPl.level;
+            }
+          });
+        }
+        updateUI();
+      });
+
+      state.socket.on('pool_updated', (newPool) => {
+        state.poolSol = newPool;
+        updateUI();
       });
     }
 
@@ -2386,15 +2492,54 @@
         connLabel.textContent = `${shortAddr} (${DEPLOY_CONFIG.NETWORK.toUpperCase()})`;
         statusDot.className = 'w-2 h-2 rounded-full bg-solGreen';
         balLabel.textContent = `Balance: ${state.walletSolBalance.toFixed(3)} SOL • ${state.rankedPassActive ? 'Ranked Pass ACTIVE ✓' : 'Unranked Cadet'}`;
-        connectBtn.textContent = 'Connected ✓';
+        connectBtn.textContent = 'Disconnect ✕';
+        connectBtn.className = 'px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-400/50 text-rose-200 text-[11px] font-mono font-extrabold shrink-0 shadow';
         if (walletPill) walletPill.textContent = `👻 ${shortAddr}`;
+      } else if (connLabel) {
+        connLabel.textContent = 'Not Connected (Demo Mode)';
+        statusDot.className = 'w-2 h-2 rounded-full bg-amber-400';
+        balLabel.textContent = 'Connect Phantom / Solflare to enter SOL Epoch';
+        connectBtn.textContent = '👻 Connect';
+        connectBtn.className = 'px-3 py-1.5 rounded-xl bg-gradient-to-r from-solPurple to-indigo-500 text-white text-[11px] font-mono font-extrabold shrink-0 shadow';
+        if (walletPill) walletPill.textContent = '👻 Wallet';
       }
     }
 
     // =========================================================================
     // 5B. LIVE SOLANA WALLET ADAPTER & 80/20 ATOMIC SOL DEPOSIT
     // =========================================================================
+    async function syncOnChainJackpotBalance() {
+      if (!window.solanaWeb3 || !DEPLOY_CONFIG.RPC_URL || DEPLOY_CONFIG.RPC_URL.includes('YOUR_HELIUS_KEY')) return;
+      try {
+        const conn = new solanaWeb3.Connection(DEPLOY_CONFIG.RPC_URL, 'confirmed');
+        const vaultPubkey = new solanaWeb3.PublicKey(DEPLOY_CONFIG.EPOCH_VAULT_WALLET);
+        const lamports = await conn.getBalance(vaultPubkey);
+        state.poolSol = +(lamports / 1e9).toFixed(2);
+        updateUI();
+      } catch (e) {
+        // Silent fallback if RPC is temporarily unreachable
+      }
+    }
+
+    async function disconnectSolanaWallet() {
+      const provider = window.phantom?.solana || window.solana;
+      try {
+        if (provider && provider.disconnect) await provider.disconnect();
+      } catch (e) {}
+      state.walletPubkey = null;
+      state.walletSolBalance = 0;
+      state.rankedPassActive = false;
+      state.tokenTier = 'cadet';
+      state.handle = document.getElementById('modal-handle-input')?.value.trim() || 'DegenLord.sol';
+      setTicker('👻 Wallet disconnected.');
+      updateUI();
+    }
+
     async function connectSolanaWallet() {
+      if (state.walletPubkey) {
+        await disconnectSolanaWallet();
+        return;
+      }
       const provider = window.phantom?.solana || window.solana;
       if (!provider) {
         setTicker('👻 Phantom/Solflare not detected! Open in Phantom browser or install extension.');
@@ -2404,36 +2549,32 @@
         const resp = await provider.connect();
         state.walletPubkey = resp.publicKey.toString();
         state.handle = `${state.walletPubkey.slice(0, 4)}...${state.walletPubkey.slice(-4)}`;
+        updateUI(); // Immediately switch HUD out of Demo Mode upon Phantom approval
 
         if (window.solanaWeb3) {
-          const conn = new solanaWeb3.Connection(DEPLOY_CONFIG.RPC_URL, 'confirmed');
-          const lamports = await conn.getBalance(resp.publicKey);
-          state.walletSolBalance = lamports / 1e9;
+          try {
+            const conn = new solanaWeb3.Connection(DEPLOY_CONFIG.RPC_URL, 'confirmed');
+            const lamports = await conn.getBalance(resp.publicKey);
+            state.walletSolBalance = lamports / 1e9;
+            await syncOnChainJackpotBalance();
 
-          // If $DGALAXY mint is configured later, auto-check SPL balance for free Commander/Admiral entry
-          if (DEPLOY_CONFIG.TOKEN_MINT) {
-            const accts = await conn.getParsedTokenAccountsByOwner(resp.publicKey, {
-              mint: new solanaWeb3.PublicKey(DEPLOY_CONFIG.TOKEN_MINT)
-            });
-            const tokBal = accts.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount || 0), 0);
-            if (tokBal >= 250000) { state.tokenTier = 'admiral'; state.rankedPassActive = true; }
-            else if (tokBal >= 50000) { state.tokenTier = 'commander'; state.rankedPassActive = true; }
+            // If $DGALAXY mint is configured later, auto-check SPL balance for free Commander/Admiral entry
+            if (DEPLOY_CONFIG.TOKEN_MINT) {
+              const accts = await conn.getParsedTokenAccountsByOwner(resp.publicKey, {
+                mint: new solanaWeb3.PublicKey(DEPLOY_CONFIG.TOKEN_MINT)
+              });
+              const tokBal = accts.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount || 0), 0);
+              if (tokBal >= 250000) { state.tokenTier = 'admiral'; state.rankedPassActive = true; }
+              else if (tokBal >= 50000) { state.tokenTier = 'commander'; state.rankedPassActive = true; }
+            }
+          } catch (rpcErr) {
+            console.warn('RPC balance lookup warning (add Helius RPC URL):', rpcErr);
           }
         }
 
         // Optional live multiplayer Socket.io handshake if SERVER_URL is set
         if (DEPLOY_CONFIG.SERVER_URL && window.io && !state.socket) {
-          const msg = `Sign in to DEGEN GALAXY Epoch #${state.epoch} (${Date.now()})`;
-          const encoded = new TextEncoder().encode(msg);
-          const signed = await provider.signMessage(encoded, 'utf8');
-          state.socket = io(DEPLOY_CONFIG.SERVER_URL);
-          state.socket.emit('auth_commander', {
-            wallet: state.walletPubkey,
-            message: msg,
-            signature: btoa(String.fromCharCode(...signed.signature)),
-            name: state.handle,
-            species: state.faction
-          });
+          initMultiplayerSocket();
         }
 
         setTicker(`👻 Wallet ${state.handle} connected on Solana ${DEPLOY_CONFIG.NETWORK}!`);
@@ -2481,6 +2622,9 @@
         state.rankedPassActive = true;
         state.gems += 250;
         state.energy = state.maxEnergy;
+        if (state.socket && state.socket.connected) {
+          state.socket.emit('deposit_confirmed', { addedSol: +(solAmount * 0.8).toFixed(2) });
+        }
         const newBal = await conn.getBalance(fromPubkey);
         state.walletSolBalance = newBal / 1e9;
         updateUI();
@@ -2533,6 +2677,9 @@
         document.getElementById('faction-modal').classList.add('hidden');
         initGalaxy();
         renderChat();
+        if (state.socket && state.socket.connected) {
+          state.socket.emit('join_commander', { name: state.handle, faction: state.faction, wallet: state.walletPubkey });
+        }
       });
 
       document.getElementById('modal-how-to-btn').addEventListener('click', () => {
@@ -2735,6 +2882,7 @@
       init3DScene();
       initGalaxy();
       bindEvents();
+      initMultiplayerSocket();
 
       let lastTime = performance.now();
       function animate(now) {

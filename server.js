@@ -20,7 +20,7 @@ const io = new Server(server, {
 // =========================================================================
 const GALAXY_STATE = {
   epoch: 1,
-  poolSol: 48.50,
+  poolSol: 0.00,
   planets: {
     wif:      { id: 'wif',      name: 'Knit-Prime', owner: 'wif',     hp: 100, maxHp: 100, level: 1, garrison: 3 },
     bonk:     { id: 'bonk',     name: 'Bonk-IV',    owner: 'bonk',    hp: 100, maxHp: 100, level: 1, garrison: 3 },
